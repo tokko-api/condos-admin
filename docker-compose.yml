@@ -1,0 +1,109 @@
+version: "3.9"
+
+services:
+  traefik:
+    image: traefik:v3.1
+    container_name: ${PROJECT_NAME}-traefik
+    command:
+      - "--api.dashboard=true"
+      - "--entrypoints.web.address=:8080"
+      #- "--entrypoints.dashboard.address=:8081"    # <--- NUEVO
+      - "--providers.file.directory=/etc/traefik/dynamic"
+      - "--providers.file.watch=true"
+    ports:
+      - "${TRAEFIK_HTTP_PORT:-8088}:8080"   # <--- host:container, ambos >=1024
+      #- "${TRAEFIK_DASHBOARD_PORT:-8081}:8081"
+    volumes:
+      # 👇 Monta el socket de Podman y expónlo dentro del contenedor como /var/run/docker.sock
+      - ./gateway/traefik_dynamic.yml:/etc/traefik/dynamic/traefik_dynamic.yml:Z
+    restart: unless-stopped
+
+  mongo:
+    image: mongo:6
+    container_name: ${PROJECT_NAME:-condos}-mongo
+    restart: unless-stopped
+    ports:
+      - "${MONGO_PORT:-27017}:27017"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: app_user
+      MONGO_INITDB_ROOT_PASSWORD: app_passT3st
+      MONGO_INITDB_DATABASE: condos
+    volumes:
+      - ./volumes/mongo:/data/db:Z
+      - ./mongo-init:/docker-entrypoint-initdb.d:ro,Z
+
+  minio:
+    image: quay.io/minio/minio:latest
+    container_name: ${PROJECT_NAME:-condos}-attachments
+    command: server /data --console-address ":9001"
+    ports: ["9000:9000","9001:9001"]
+    environment:
+      - MINIO_ROOT_USER=admin
+      - MINIO_ROOT_PASSWORD=admin12345
+    volumes:
+      - ./minio-data:/data
+
+  auth-api:
+    build: ./auth-api
+    container_name: ${PROJECT_NAME}-auth-api
+    environment:
+      SPRING_DATA_MONGODB_URI: "mongodb://app_user:app_passT3st@mongo:27017/condos?authSource=condos"
+      SPRING_PROFILES_ACTIVE: "dev"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  tenant-api:
+    build: ./tenant-api
+    container_name: ${PROJECT_NAME}-tenant-api
+    environment:
+      SPRING_DATA_MONGODB_URI: "mongodb://app_user:app_passT3st@mongo:27017/condos?authSource=condos"
+      SPRING_PROFILES_ACTIVE: "dev"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  user-api:
+    build: ./user-api
+    container_name: ${PROJECT_NAME}-user-api
+    environment:
+      SPRING_DATA_MONGODB_URI: "mongodb://app_user:app_passT3st@mongo:27017/condos?authSource=condos"
+      SPRING_PROFILES_ACTIVE: "dev"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/actuator/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  board-api:
+    build: ./board-api
+    container_name: ${PROJECT_NAME}-board-api
+    environment:
+      SPRING_DATA_MONGODB_URI: "mongodb://app_user:app_passT3st@mongo:27017/condos?authSource=condos"
+      SPRING_PROFILES_ACTIVE: "dev"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/actuator/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+    #task-api:
+    #build: ./task-api
+    #container_name: ${PROJECT_NAME}-task-api
+        #labels:
+        #- "traefik.enable=true"
+        #- "traefik.http.routers.task.rule=PathPrefix(`/me/task`)"
+      #- "traefik.http.services.task.loadbalancer.server.port=${SPRING_PORT}"
+      #healthcheck:
+      #test: ["CMD", "wget", "-qO-", "http://localhost:8080/actuator/health"]
+      #interval: 10s
+      #timeout: 3s
+      #retries: 5
+
+networks:
+  default:
+    name: ${NETWORK_NAME}

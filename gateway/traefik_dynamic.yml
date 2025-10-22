@@ -1,0 +1,75 @@
+http:
+  middlewares:
+    cors-allow-local:
+      headers:
+        accessControlAllowOriginList:
+          - "http://localhost:8081"
+          - "http://localhost:3000"
+        accessControlAllowMethods:
+          - GET
+          - POST
+          - PUT
+          - PATCH
+          - DELETE
+          - OPTIONS
+        accessControlAllowHeaders:
+          - Authorization
+          - Content-Type
+          - Accept
+          - Origin
+        accessControlAllowCredentials: true
+
+  routers:
+    r-auth:
+      rule: "PathPrefix(`/condos/api/auth`)"
+      service: s-auth
+      entryPoints: ["web"]
+      middlewares: ["cors-allow-local"]
+    r-tenant:
+      rule: "PathPrefix(`/condos/api/tenant`) || PathPrefix(`/condos/api/admin/tenant`)"
+      service: s-tenant
+      entryPoints: ["web"]
+      middlewares: ["cors-allow-local"]
+    r-user:
+      rule: "PathPrefix(`/condos/api/user`) || PathPrefix(`/condos/api/admin/user`)"
+      service: s-user
+      entryPoints: ["web"]
+      middlewares: ["cors-allow-local"]
+    r-user-internal:
+      rule: "PathPrefix(`/internal/users`)"
+      service: s-user
+      entryPoints: ["web"]
+    r-board:
+      rule: "PathPrefix(`/condos/api/board`)"
+      service: s-board
+      entryPoints: ["web"]
+      middlewares: ["cors-allow-local"]
+    r-auth-swagger:
+      rule: "PathPrefix(`/condos/api/auth/swagger-ui`) || PathPrefix(`/condos/api/auth/v3/api-docs`)"
+      service: s-auth
+      entryPoints: ["web"]
+      middlewares: ["cors-allow-local"]
+
+  # Dashboard (opcional; sirve en /dashboard)
+    r-dashboard:
+      rule: "PathPrefix(`/dashboard`) || PathPrefix(`/api`)"
+      entryPoints: ["web"]
+      service: "api@internal"
+
+  services:
+    s-auth:
+      loadBalancer:
+        servers:
+          - url: "http://auth-api:8080"
+    s-tenant:
+      loadBalancer:
+        servers:
+          - url: "http://tenant-api:8080"
+    s-user:
+      loadBalancer:
+        servers:
+          - url: "http://user-api:8080"
+    s-board:
+      loadBalancer:
+        servers:
+          - url: "http://board-api:8080"

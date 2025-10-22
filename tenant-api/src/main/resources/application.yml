@@ -1,0 +1,37 @@
+server:
+  port: 8080
+
+spring:
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration
+      - org.springframework.boot.autoconfigure.jdbc.DataSourceTransactionManagerAutoConfiguration
+      - org.springframework.boot.autoconfigure.orm.jpa.HibernateJpaAutoConfiguration
+  profiles:
+    active: dev
+  data:
+    mongodb:
+      uri: ${SPRING_DATA_MONGODB_URI}
+  main:
+    allow-bean-definition-overriding: true
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
+logging:
+  level:
+    root: INFO
+    org.springframework: WARN
+    com.condos: DEBUG
+
+app:
+  errors:
+    verbose: true
+  security:
+    jwt:
+      secret: ${JWT_SECRET:change-me-please-32bytes-minimum-secret-key!!}
+      issuer: condos-auth
+      expires-minutes: ${JWT_EXPIRES_MINUTES:240}
