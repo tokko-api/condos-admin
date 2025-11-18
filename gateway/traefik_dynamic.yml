@@ -48,6 +48,7 @@ http:
           - Accept
           - Origin
           - X-Requested-With
+          - ngrok-skip-browser-warning
         accessControlAllowCredentials: true
         accessControlMaxAge: 86400
 
