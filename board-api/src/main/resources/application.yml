@@ -53,9 +53,9 @@ minio:
 
 public:
   api:
-    base: https://d9f803cbaa64.ngrok-free.app
+    base: http://206.189.69.68
   minio:
-    base: https://d9f803cbaa64.ngrok-free.app/minio
+    base: http://206.189.69.68/minio
 
 storage:
   bucket: condos-attachments
