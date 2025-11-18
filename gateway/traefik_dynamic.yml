@@ -63,17 +63,17 @@ http:
       rule: "PathPrefix(`/condos/api/auth`)"
       service: s-auth
       entryPoints: ["web"]
-      middlewares: ["cors-chain"]
+      middlewares: ["cors-allow-local"]
     r-tenant:
       rule: "PathPrefix(`/condos/api/tenant`) || PathPrefix(`/condos/api/admin/tenant`)"
       service: s-tenant
       entryPoints: ["web"]
-      middlewares: ["cors-chain"]
+      middlewares: ["cors-allow-local"]
     r-user:
       rule: "PathPrefix(`/condos/api/user`) || PathPrefix(`/condos/api/admin/user`)"
       service: s-user
       entryPoints: ["web"]
-      middlewares: ["cors-chain"]
+      middlewares: ["cors-allow-local"]
     r-user-internal:
       rule: "PathPrefix(`/internal/users`)"
       service: s-user
@@ -82,12 +82,12 @@ http:
       rule: "PathPrefix(`/condos/api/board`) || PathPrefix(`/condos/api/files`)"
       service: s-board
       entryPoints: ["web"]
-      middlewares: ["cors-chain"]
+      middlewares: ["cors-allow-local"]
     r-auth-swagger:
       rule: "PathPrefix(`/condos/api/auth/swagger-ui`) || PathPrefix(`/condos/api/auth/v3/api-docs`)"
       service: s-auth
       entryPoints: ["web"]
-      middlewares: ["cors-chain"]
+      middlewares: ["cors-allow-local"]
     # Dashboard (opcional; sirve en /dashboard)
     r-dashboard:
       rule: "PathPrefix(`/dashboard`)"
