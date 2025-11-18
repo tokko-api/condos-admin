@@ -1,8 +1,5 @@
 http:
   middlewares:
-    strip-minio:
-      stripPrefix:
-        prefixes: ["/minio"]
     cors-allow-exp:
       headers:
         accessControlAllowOriginListRegex:
@@ -36,27 +33,6 @@ http:
           - Origin
           - X-Requested-With
           - ngrok-skip-browser-warning
-        accessControlAllowCredentials: true
-        accessControlMaxAge: 86400
-
-    cors-minio:
-      headers:
-        accessControlAllowOriginList:
-          - "https://zr9p52s-jolvera70-8081.exp.direct"
-          - "https://d9f803cbaa64.ngrok-free.app"
-        accessControlAllowMethods:
-          - GET
-          - PUT
-          - POST
-          - OPTIONS
-        accessControlAllowHeaders:
-          - Authorization
-          - Content-Type
-          - Origin
-          - X-Amz-Date
-          - X-Amz-Content-Sha256
-          - X-Amz-Security-Token
-          - X-Requested-With
         accessControlAllowCredentials: true
         accessControlMaxAge: 86400
 
@@ -112,11 +88,6 @@ http:
       service: s-auth
       entryPoints: ["web"]
       middlewares: ["cors-chain"]
-    r-minio:
-      rule: "PathPrefix(`/minio/condos-attachments`)"
-      entryPoints: ["web"]
-      service: s-minio
-      middlewares: ["strip-minio", "cors-minio", "cors-chain"]
     # Dashboard (opcional; sirve en /dashboard)
     r-dashboard:
       rule: "PathPrefix(`/dashboard`)"

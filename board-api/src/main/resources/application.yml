@@ -59,8 +59,7 @@ public:
 
 storage:
   bucket: condos-attachments
-  # Host EXTERNO (el que verá el celular)
-  externalEndpoint: https://d9f803cbaa64.ngrok-free.app    # o http://192.168.1.50:9000
+  externalEndpoint: http://206.189.69.68
   region: us-east-1
   accessKey: admin
   secretKey: admin12345
