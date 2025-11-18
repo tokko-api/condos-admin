@@ -15,24 +15,24 @@ spring:
   main:
     allow-bean-definition-overriding: true
 
+springdoc:
+  api-docs:
+    enabled: true
+
 management:
   endpoints:
     web:
       exposure:
         include: health,info
+  endpoint:
+    health:
+      show-details: never
 
 logging:
   level:
-    root: INFO
-    org.springframework: WARN
-    org.springframework.security: WARN
+    root: DEBUG
+    org.springframework: DEBUG
     com.condos: DEBUG
-
-user:
-  api:
-    # si usas el endpoint interno:
-    base-url: http://user-api:8080/condos/api/user
-    internal-path: /internal   #
 
 app:
   errors:
@@ -43,25 +43,9 @@ app:
       issuer: condos-auth
       expires-minutes: ${JWT_EXPIRES_MINUTES:240}
 
-minio:
-  endpoint: http://minio:9000
-  accessKey: ${MINIO_ACCESS_KEY:admin}
-  secretKey: ${MINIO_SECRET_KEY:admin12345}
-  bucket: condos-attachments
-  region: us-east-1
-  presignMinutes: 10
+internal:
+  secret: change-me-please-32bytes-minimum-secret-key!!
 
-public:
+user:
   api:
-    base: https://d9f803cbaa64.ngrok-free.app
-  minio:
-    base: https://d9f803cbaa64.ngrok-free.app/minio
-
-storage:
-  bucket: condos-attachments
-  # Host EXTERNO (el que verá el celular)
-  externalEndpoint: https://d9f803cbaa64.ngrok-free.app    # o http://192.168.1.50:9000
-  region: us-east-1
-  accessKey: admin
-  secretKey: admin12345
-  expiresSeconds: 600
+    url: http://user-api:8080/condos/api/user

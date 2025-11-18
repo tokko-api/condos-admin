@@ -11,8 +11,15 @@ public record BoardReportRes(
         long overdueTasks,
         long completedLast30d,
         List<PerDay> tasksPerDay,
-        List<PerBoard> tasksPerBoard
+        List<PerBoard> tasksPerBoard,
+
+        // 👇 NUEVOS CAMPOS
+        List<LabelValue> statusPie,
+        List<LabelValue> overdueByColony,
+        List<LabelValue> topOverdueColonies
 ) {
     public record PerDay(String date, long count) {}
     public record PerBoard(String boardId, String boardName, long count) {}
+
+    public record LabelValue(String label, long value) {}
 }

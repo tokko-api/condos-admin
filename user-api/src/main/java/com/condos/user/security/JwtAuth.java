@@ -16,8 +16,16 @@ public class JwtAuth {
     );
 
     public boolean isSuperadmin(Authentication auth) {
+        if (auth == null) return false;
+        // por authorities
+        if (auth.getAuthorities() != null &&
+                auth.getAuthorities().stream()
+                        .anyMatch(a -> "ROLE_SUPERADMIN".equalsIgnoreCase(a.getAuthority()))) {
+            return true;
+        }
+        // por orgs en details (tu lógica actual)
         for (Map<String, String> m : orgs(auth)) {
-            if ("SUPERADMIN".equals(m.get("role"))) return true;
+            if ("SUPERADMIN".equalsIgnoreCase(m.get("role"))) return true;
         }
         return false;
     }

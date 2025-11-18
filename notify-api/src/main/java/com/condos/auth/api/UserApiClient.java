@@ -90,7 +90,7 @@ public class UserApiClient {
     }
 
     /** DTO alineado con el user-api (orgId como String) */
-    public record OrgAssignment(String orgId, String role, String status, String orgName) {
+    public record OrgAssignment(String orgId, String role, String status) {
         public boolean isActive() { return "ACTIVE".equalsIgnoreCase(status); }
     }
 }

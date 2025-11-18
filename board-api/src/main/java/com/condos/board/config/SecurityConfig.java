@@ -35,8 +35,14 @@ public class SecurityConfig {
                 .exceptionHandling(eh -> eh.authenticationEntryPoint(new HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED)))
 
                 .authorizeHttpRequests(auth -> auth
+                        .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()   // ⬅️ preflight CORS
                         .requestMatchers("/health", "/actuator/health", "/actuator/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/health").permitAll()
+
+                        // --- FILES (binario via proxy) ---
+                        .requestMatchers(HttpMethod.GET,  "/condos/api/files/**").authenticated()
+                        .requestMatchers(HttpMethod.POST, "/condos/api/files/**").authenticated()
+                        .requestMatchers(HttpMethod.PUT,  "/condos/api/files/**").authenticated()
 
                         .requestMatchers(HttpMethod.GET, "/condos/api/board/reports/**").authenticated()
                         .requestMatchers(HttpMethod.GET, "/condos/api/board/reports").authenticated()

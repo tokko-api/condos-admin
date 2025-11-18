@@ -163,4 +163,22 @@ public class TenantService {
                 .filter(Objects::nonNull)
                 .toList();
     }
+
+    /** Obtiene el tenant por id (incluye ARCHIVED si existe). */
+    public Tenant getById(String id) {
+        if (!ObjectId.isValid(id)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "invalid tenant id");
+        }
+        return repo.findById(new ObjectId(id))
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "tenant not found"));
+    }
+
+    /** Igual a getById, pero si está ARCHIVED lanza 404. */
+    public Tenant getByIdActiveOnly(String id) {
+        Tenant t = getById(id);
+        if (t.status == TenantStatus.ARCHIVED) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "tenant archived");
+        }
+        return t;
+    }
 }

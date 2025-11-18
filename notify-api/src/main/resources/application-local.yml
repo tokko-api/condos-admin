@@ -1,0 +1,19 @@
+server:
+  port: 8088
+
+spring:
+  data:
+    mongodb:
+      uri: mongodb://app_user:app_passT3st@localhost:27017/condos?authSource=condos
+
+logging:
+  level:
+    root: INFO
+    org.springframework: DEBUG
+    com.condos: DEBUG
+
+springdoc:
+  api-docs.path: /v3/api-docs
+  swagger-ui.path: /swagger-ui.html
+  api-docs.enabled: true
+  swagger-ui.enabled: true

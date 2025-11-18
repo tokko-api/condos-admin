@@ -32,12 +32,14 @@ public class TaskService {
         return repo.findById(id);
     }
 
-    public Task update(String id, String title, String description, String assigneeId, String dueDate) {
+    public Task update(String id, String title, String description, String assigneeId, Instant dueDate) {
         Task t = repo.findById(id).orElseThrow(NoSuchElementException::new);
-        t.setTitle(title);
-        t.setDescription(description);
-        t.setAssigneeId(assigneeId);
-        t.setDueDate(parseDueDate(dueDate));
+
+        if (title != null)        t.setTitle(title);
+        if (description != null)  t.setDescription(description);
+        if (assigneeId != null)   t.setAssigneeId(assigneeId);
+        if (dueDate != null)      t.setDueDate(dueDate);
+
         t.setUpdatedAt(Instant.now());
         return repo.save(t);
     }
@@ -104,5 +106,4 @@ public class TaskService {
 
         return new PageImpl<>(filtered, pageable, filtered.size());
     }
-
 }

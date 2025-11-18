@@ -42,9 +42,18 @@ public class TenantController {
     // ======== READ ========
     @GetMapping("/{id}")
     @PreAuthorize("hasAnyAuthority('SUPERADMIN','ADMIN@' + authentication.details)")
-    public List<TenantResponse> getByIds(@RequestParam("ids") List<String> rawIds) {
+    public TenantResponse getById(@PathVariable("id") String id) {
         // delega en el servicio y mapea a DTO
-        return service.getByIds(rawIds)
+        return TenantMapper.toDto(service.getById(id));
+    }
+
+    @GetMapping("/lookup")
+    @PreAuthorize("""
+  @jwtAuth.isSuperadmin(authentication) or
+  @jwtAuth.hasRoleInAnyOrg(authentication, #ids, {'ADMINISTRADOR','SUPERVISOR','OPERATIVO'})
+""")
+    public List<TenantResponse> getByIds(@RequestParam("ids") List<String> ids) {
+        return service.getByIds(ids)
                 .stream()
                 .map(TenantMapper::toDto)
                 .toList();

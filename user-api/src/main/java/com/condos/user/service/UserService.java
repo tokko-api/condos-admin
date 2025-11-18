@@ -6,12 +6,15 @@ import com.condos.user.domain.UserProfileRepository;
 import com.condos.user.dto.CreateUserRequest;
 import com.condos.user.model.UserRole;
 import com.condos.user.model.UserStatus;
+import com.condos.user.security.JwtAuth;
 import com.condos.user.util.ObjectIds;
 import com.condos.user.util.Passwords;
 import org.bson.types.ObjectId;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 
@@ -25,10 +28,12 @@ public class UserService {
 
     private final UserProfileRepository repo;
     private final AuthApiClient authApiClient;
+    private final JwtAuth jwtAuth;
 
-    public UserService(UserProfileRepository repo, AuthApiClient authApiClient) {
+    public UserService(UserProfileRepository repo, AuthApiClient authApiClient, JwtAuth jwtAuth) {
         this.repo = repo;
         this.authApiClient = authApiClient;
+        this.jwtAuth = jwtAuth;
     }
 
     public UserSummary create(Authentication auth, CreateUserRequest req) {
@@ -172,13 +177,68 @@ public class UserService {
     }
 
 
-    public UserSummary changeStatus(String id, String orgId, String status) {
-        var up = repo.findById(id).orElseThrow(() -> new ResponseStatusException(NOT_FOUND));
-        var a = up.orgAssignments.stream().filter(x -> orgId.equals(x.orgId)).findFirst()
-                .orElseThrow(() -> new ResponseStatusException(BAD_REQUEST, "no assignment for org"));
-        a.status = UserStatus.SUSPENDED;
+    @Transactional
+    public UserSummary changeStatus(String id, String orgIdHex, UserStatus requested) {
+        var up = repo.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
+
+        var assign = up.orgAssignments.stream()
+                .filter(x -> matchesOrgId(x.orgId, orgIdHex))
+                .findFirst()
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.BAD_REQUEST, "no assignment for org: " + orgIdHex));
+
+        var current = assign.status;                     // estado actual
+        var next = mapExternalToInternal(requested);     // estado solicitado (normalizado)
+
+        validateTransition(current, next);               // reglas de negocio
+
+        if (current == next) {                           // no-op, evita un write innecesario
+            return toSummary(up);
+        }
+
+        assign.status = next;
+
         repo.save(up);
         return toSummary(up);
+    }
+
+    private boolean matchesOrgId(Object stored, String hex) {
+        if (stored instanceof ObjectId oid) return oid.toHexString().equalsIgnoreCase(hex);
+        if (stored instanceof String s)       return s.equals(hex);
+        return String.valueOf(stored).equals(hex);
+    }
+
+    private UserStatus mapExternalToInternal(UserStatus requested) {
+        return switch (requested) {
+            case ACTIVE      -> UserStatus.ACTIVE;
+            case ARCHIVED    -> UserStatus.ARCHIVED;
+            case SUSPENDED   -> UserStatus.SUSPENDED;
+            // si en el DTO externo existe INACTIVE y lo estás deserializando a UserStatus,
+            // agrega un valor INACTIVE al enum o usa un DTO string y normaliza aquí:
+            // case INACTIVE -> UserStatus.SUSPENDED;
+        };
+    }
+
+    private void validateTransition(UserStatus from, UserStatus to) {
+        if (from == to) return;
+
+        boolean isSuperadmin = jwtAuth.isSuperadmin(SecurityContextHolder.getContext().getAuthentication());
+
+        if (from == UserStatus.ARCHIVED && to != UserStatus.ARCHIVED && !isSuperadmin) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "cannot unarchive user");
+        }
+
+        if (isSuperadmin) return;
+
+        boolean allowed =
+                (from == UserStatus.ACTIVE && (to == UserStatus.SUSPENDED || to == UserStatus.ARCHIVED)) ||
+                        (from == UserStatus.SUSPENDED && (to == UserStatus.ACTIVE || to == UserStatus.ARCHIVED));
+
+        if (!allowed) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "invalid transition: " + from + " -> " + to);
+        }
     }
 
     public void delete(String id) {

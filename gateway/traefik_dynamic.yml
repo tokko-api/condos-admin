@@ -1,10 +1,12 @@
 http:
   middlewares:
-    cors-allow-local:
+    strip-minio:
+      stripPrefix:
+        prefixes: ["/minio"]
+    cors-allow-exp:
       headers:
-        accessControlAllowOriginList:
-          - "http://localhost:8081"
-          - "http://localhost:3000"
+        accessControlAllowOriginListRegex:
+          - "^https://[a-z0-9-]+\\.exp\\.direct$"
         accessControlAllowMethods:
           - GET
           - POST
@@ -17,44 +19,110 @@ http:
           - Content-Type
           - Accept
           - Origin
+          - X-Requested-With
+          - ngrok-skip-browser-warning   # útil con ngrok
         accessControlAllowCredentials: true
+        accessControlMaxAge: 86400
+
+    cors-allow-public:
+      headers:
+        accessControlAllowOriginListRegex:
+          - "^https://[a-z0-9-]+\\.ngrok-free\\.app$"
+        accessControlAllowMethods: [GET, POST, PUT, PATCH, DELETE, OPTIONS]
+        accessControlAllowHeaders:
+          - Authorization
+          - Content-Type
+          - Accept
+          - Origin
+          - X-Requested-With
+          - ngrok-skip-browser-warning
+        accessControlAllowCredentials: true
+        accessControlMaxAge: 86400
+
+    cors-minio:
+      headers:
+        accessControlAllowOriginList:
+          - "https://zr9p52s-jolvera70-8081.exp.direct"
+          - "https://d9f803cbaa64.ngrok-free.app"
+        accessControlAllowMethods:
+          - GET
+          - PUT
+          - POST
+          - OPTIONS
+        accessControlAllowHeaders:
+          - Authorization
+          - Content-Type
+          - Origin
+          - X-Amz-Date
+          - X-Amz-Content-Sha256
+          - X-Amz-Security-Token
+          - X-Requested-With
+        accessControlAllowCredentials: true
+        accessControlMaxAge: 86400
+
+    cors-allow-local:
+      headers:
+        accessControlAllowOriginList:
+          - "http://localhost:8081"
+          - "http://localhost:3000"
+        accessControlAllowMethods: [GET, POST, PUT, PATCH, DELETE, OPTIONS]
+        accessControlAllowHeaders:
+          - Authorization
+          - Content-Type
+          - Accept
+          - Origin
+          - X-Requested-With
+        accessControlAllowCredentials: true
+        accessControlMaxAge: 86400
+
+    cors-chain:
+      chain:
+        middlewares:
+          - cors-allow-exp
+          - cors-allow-public
+          - cors-allow-local
 
   routers:
     r-auth:
       rule: "PathPrefix(`/condos/api/auth`)"
       service: s-auth
       entryPoints: ["web"]
-      middlewares: ["cors-allow-local"]
+      middlewares: ["cors-chain"]
     r-tenant:
       rule: "PathPrefix(`/condos/api/tenant`) || PathPrefix(`/condos/api/admin/tenant`)"
       service: s-tenant
       entryPoints: ["web"]
-      middlewares: ["cors-allow-local"]
+      middlewares: ["cors-chain"]
     r-user:
       rule: "PathPrefix(`/condos/api/user`) || PathPrefix(`/condos/api/admin/user`)"
       service: s-user
       entryPoints: ["web"]
-      middlewares: ["cors-allow-local"]
+      middlewares: ["cors-chain"]
     r-user-internal:
       rule: "PathPrefix(`/internal/users`)"
       service: s-user
       entryPoints: ["web"]
     r-board:
-      rule: "PathPrefix(`/condos/api/board`)"
+      rule: "PathPrefix(`/condos/api/board`) || PathPrefix(`/condos/api/files`)"
       service: s-board
       entryPoints: ["web"]
-      middlewares: ["cors-allow-local"]
+      middlewares: ["cors-chain"]
     r-auth-swagger:
       rule: "PathPrefix(`/condos/api/auth/swagger-ui`) || PathPrefix(`/condos/api/auth/v3/api-docs`)"
       service: s-auth
       entryPoints: ["web"]
-      middlewares: ["cors-allow-local"]
-
-  # Dashboard (opcional; sirve en /dashboard)
+      middlewares: ["cors-chain"]
+    r-minio:
+      rule: "PathPrefix(`/minio/condos-attachments`)"
+      entryPoints: ["web"]
+      service: s-minio
+      middlewares: ["strip-minio", "cors-minio", "cors-chain"]
+    # Dashboard (opcional; sirve en /dashboard)
     r-dashboard:
-      rule: "PathPrefix(`/dashboard`) || PathPrefix(`/api`)"
+      rule: "PathPrefix(`/dashboard`)"
       entryPoints: ["web"]
       service: "api@internal"
+      middlewares: ["dash-auth"]
 
   services:
     s-auth:
@@ -73,3 +141,8 @@ http:
       loadBalancer:
         servers:
           - url: "http://board-api:8080"
+    s-minio:
+      loadBalancer:
+        passHostHeader: true
+        servers:
+          - url: "http://minio:9000"

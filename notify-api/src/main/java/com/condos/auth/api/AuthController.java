@@ -104,35 +104,10 @@ public class AuthController {
         }
         var jws = jwt.parse(authorization.substring(7));
         String userId = jws.getBody().getSubject();
-        String email  = (String) jws.getBody().get("email");
+        String email = (String) jws.getBody().get("email");
         @SuppressWarnings("unchecked")
-        List<Map<String, String>> orgsFromToken = (List<Map<String, String>>) jws.getBody().get("orgs");
+        List<Map<String, String>> orgs = (List<Map<String, String>>) jws.getBody().get("orgs");
         Long ver = ((Number) jws.getBody().get("ver")).longValue();
-
-        // --- Enriquecer con nombres de colonia ---
-        Map<String, String> nameByOrg = new HashMap<>();
-        try {
-            // Asegúrate de que UserApiClient devuelva también orgName
-            var assignments = userApi.getAssignmentsByEmail(email).block(Duration.ofSeconds(3));
-            if (assignments != null) {
-                assignments.forEach(a -> {
-                    String id = a.orgId();
-                    String nm = a.orgName() != null && !a.orgName().isBlank() ? a.orgName() : id;
-                    nameByOrg.put(id, nm);
-                });
-            }
-        } catch (Exception ignored) {
-            // si falla el user-api, devolvemos los IDs como fallback
-        }
-
-        List<Map<String, String>> orgs = orgsFromToken.stream()
-                .map(o -> {
-                    String id   = o.get("orgId");
-                    String role = o.get("role");
-                    String name = nameByOrg.getOrDefault(id, id);
-                    return Map.of("orgId", id, "name", name, "role", role);
-                })
-                .toList();
 
         return Map.of(
                 "id", userId,
