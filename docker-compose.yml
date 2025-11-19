@@ -61,7 +61,7 @@ services:
     build: ./auth-api
     container_name: ${PROJECT_NAME}-auth-api
     environment:
-      SPRING_DATA_MONGODB_URI: "mongodb://app_user:app_passT3st@mongo:27017/condos?authSource=condos"
+      SPRING_DATA_MONGODB_URI: "mongodb://app_user:app_passT3st@mongo:27017/condos?authSource=admin"
       SPRING_PROFILES_ACTIVE: "dev"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]
@@ -73,7 +73,7 @@ services:
     build: ./tenant-api
     container_name: ${PROJECT_NAME}-tenant-api
     environment:
-      SPRING_DATA_MONGODB_URI: "mongodb://app_user:app_passT3st@mongo:27017/condos?authSource=condos"
+      SPRING_DATA_MONGODB_URI: "mongodb://app_user:app_passT3st@mongo:27017/condos?authSource=admin"
       SPRING_PROFILES_ACTIVE: "dev"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]
@@ -85,7 +85,7 @@ services:
     build: ./user-api
     container_name: ${PROJECT_NAME}-user-api
     environment:
-      SPRING_DATA_MONGODB_URI: "mongodb://app_user:app_passT3st@mongo:27017/condos?authSource=condos"
+      SPRING_DATA_MONGODB_URI: "mongodb://app_user:app_passT3st@mongo:27017/condos?authSource=admin"
       SPRING_PROFILES_ACTIVE: "dev"
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:8080/actuator/health"]
@@ -97,7 +97,7 @@ services:
     build: ./board-api
     container_name: ${PROJECT_NAME}-board-api
     environment:
-      SPRING_DATA_MONGODB_URI: "mongodb://app_user:app_passT3st@mongo:27017/condos?authSource=condos"
+      SPRING_DATA_MONGODB_URI: "mongodb://app_user:app_passT3st@mongo:27017/condos?authSource=admin"
       SPRING_PROFILES_ACTIVE: "dev"
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:8080/actuator/health"]
