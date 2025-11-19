@@ -3,20 +3,34 @@ version: "3.9"
 services:
   traefik:
     image: traefik:v3.1
-    container_name: ${PROJECT_NAME}-traefik
+    container_name: condos-traefik
     command:
       - "--api.dashboard=true"
-      - "--entrypoints.web.address=:8080"
-      #- "--entrypoints.dashboard.address=:8081"    # <--- NUEVO
+
+      # Entrypoints
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.websecure.address=:443"
+
+      # Redirección de HTTP → HTTPS
+      - "--entrypoints.web.http.redirections.entrypoint.to=websecure"
+      - "--entrypoints.web.http.redirections.entrypoint.scheme=https"
+
+      # Proveedor dinámico
       - "--providers.file.directory=/etc/traefik/dynamic"
       - "--providers.file.watch=true"
+
+      # Let's Encrypt
+      - "--certificatesresolvers.le.acme.httpchallenge=true"
+      - "--certificatesresolvers.le.acme.httpchallenge.entrypoint=web"
+      - "--certificatesresolvers.le.acme.email=jolvera70@gmail.com"
+      - "--certificatesresolvers.le.acme.storage=/acme.json"
+
     ports:
-      - "${TRAEFIK_HTTP_PORT:-8088}:8080"   # <--- host:container, ambos >=1024
-      #- "${TRAEFIK_DASHBOARD_PORT:-8081}:8081"
+      - "80:80"
+      - "443:443"
     volumes:
-      # 👇 Monta el socket de Podman y expónlo dentro del contenedor como /var/run/docker.sock
       - ./gateway/traefik_dynamic.yml:/etc/traefik/dynamic/traefik_dynamic.yml:Z
-    restart: unless-stopped
+      - ./acme.json:/acme.json
 
   mongo:
     image: mongo:6

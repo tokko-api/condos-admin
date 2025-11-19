@@ -1,5 +1,6 @@
 http:
   middlewares:
+    # 🌐 CORS para Expo web (exp.direct)
     cors-allow-exp:
       headers:
         accessControlAllowOriginListRegex:
@@ -17,10 +18,11 @@ http:
           - Accept
           - Origin
           - X-Requested-With
-          - ngrok-skip-browser-warning   # útil con ngrok
+          - ngrok-skip-browser-warning
         accessControlAllowCredentials: true
         accessControlMaxAge: 86400
 
+    # 🌐 CORS para túneles ngrok (si los sigues usando)
     cors-allow-public:
       headers:
         accessControlAllowOriginListRegex:
@@ -36,11 +38,15 @@ http:
         accessControlAllowCredentials: true
         accessControlMaxAge: 86400
 
+    # 🌐 CORS para localhost + TU DOMINIO
     cors-allow-local:
       headers:
         accessControlAllowOriginList:
           - "http://localhost:8081"
           - "http://localhost:3000"
+          - "https://condosadmin.site"
+          - "https://www.condosadmin.site"
+          - "https://api.condosadmin.site"
         accessControlAllowMethods: [GET, POST, PUT, PATCH, DELETE, OPTIONS]
         accessControlAllowHeaders:
           - Authorization
@@ -52,6 +58,7 @@ http:
         accessControlAllowCredentials: true
         accessControlMaxAge: 86400
 
+    # 🔗 Cadena que agrupa todos los CORS anteriores
     cors-chain:
       chain:
         middlewares:
@@ -60,41 +67,63 @@ http:
           - cors-allow-local
 
   routers:
+    # ====== APIs (todas bajo api.condosadmin.site) ======
     r-auth:
-      rule: "PathPrefix(`/condos/api/auth`)"
+      rule: "Host(`api.condosadmin.site`) && PathPrefix(`/condos/api/auth`)"
       service: s-auth
-      entryPoints: ["web"]
-      middlewares: ["cors-allow-local"]
+      entryPoints: ["websecure"]
+      middlewares: ["cors-chain"]
+      tls:
+        certResolver: le
+
     r-tenant:
-      rule: "PathPrefix(`/condos/api/tenant`) || PathPrefix(`/condos/api/admin/tenant`)"
+      rule: "Host(`api.condosadmin.site`) && (PathPrefix(`/condos/api/tenant`) || PathPrefix(`/condos/api/admin/tenant`))"
       service: s-tenant
-      entryPoints: ["web"]
-      middlewares: ["cors-allow-local"]
+      entryPoints: ["websecure"]
+      middlewares: ["cors-chain"]
+      tls:
+        certResolver: le
+
     r-user:
-      rule: "PathPrefix(`/condos/api/user`) || PathPrefix(`/condos/api/admin/user`)"
+      rule: "Host(`api.condosadmin.site`) && (PathPrefix(`/condos/api/user`) || PathPrefix(`/condos/api/admin/user`))"
       service: s-user
-      entryPoints: ["web"]
-      middlewares: ["cors-allow-local"]
+      entryPoints: ["websecure"]
+      middlewares: ["cors-chain"]
+      tls:
+        certResolver: le
+
     r-user-internal:
-      rule: "PathPrefix(`/internal/users`)"
+      rule: "Host(`api.condosadmin.site`) && PathPrefix(`/internal/users`)"
       service: s-user
-      entryPoints: ["web"]
+      entryPoints: ["websecure"]
+      tls:
+        certResolver: le
+
     r-board:
-      rule: "PathPrefix(`/condos/api/board`) || PathPrefix(`/condos/api/files`)"
+      rule: "Host(`api.condosadmin.site`) && (PathPrefix(`/condos/api/board`) || PathPrefix(`/condos/api/files`))"
       service: s-board
-      entryPoints: ["web"]
-      middlewares: ["cors-allow-local"]
+      entryPoints: ["websecure"]
+      middlewares: ["cors-chain"]
+      tls:
+        certResolver: le
+
     r-auth-swagger:
-      rule: "PathPrefix(`/condos/api/auth/swagger-ui`) || PathPrefix(`/condos/api/auth/v3/api-docs`)"
+      rule: "Host(`api.condosadmin.site`) && (PathPrefix(`/condos/api/auth/swagger-ui`) || PathPrefix(`/condos/api/auth/v3/api-docs`))"
       service: s-auth
-      entryPoints: ["web"]
-      middlewares: ["cors-allow-local"]
-    # Dashboard (opcional; sirve en /dashboard)
+      entryPoints: ["websecure"]
+      middlewares: ["cors-chain"]
+      tls:
+        certResolver: le
+
+    # Dashboard Traefik (opcional: puedes usar otro subdominio tipo traefik.condosadmin.site)
     r-dashboard:
-      rule: "PathPrefix(`/dashboard`)"
-      entryPoints: ["web"]
+      rule: "Host(`api.condosadmin.site`) && PathPrefix(`/dashboard`)"
+      entryPoints: ["websecure"]
       service: "api@internal"
-      middlewares: ["dash-auth"]
+      tls:
+        certResolver: le
+      # si no tienes 'dash-auth' definido, quítalo o créalo
+      # middlewares: ["dash-auth"]
 
   services:
     s-auth:
