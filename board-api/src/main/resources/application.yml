@@ -53,13 +53,13 @@ minio:
 
 public:
   api:
-    base: http://206.189.69.68
+    base: https://api.condosadmin.site
   minio:
-    base: http://206.189.69.68/minio
+    base: https://api.condosadmin.site/minio
 
 storage:
   bucket: condos-attachments
-  externalEndpoint: http://206.189.69.68
+  externalEndpoint: https://api.condosadmin.site
   region: us-east-1
   accessKey: admin
   secretKey: admin12345
