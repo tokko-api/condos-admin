@@ -3,3 +3,4 @@
 /volumes/
 /volumes/mongo/
 /minio-data/
+/board-api/target/
