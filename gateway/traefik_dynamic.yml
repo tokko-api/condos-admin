@@ -1,43 +1,5 @@
 http:
   middlewares:
-    # 🌐 CORS para Expo web (exp.direct)
-    cors-allow-exp:
-      headers:
-        accessControlAllowOriginListRegex:
-          - "^https://[a-z0-9-]+\\.exp\\.direct$"
-        accessControlAllowMethods:
-          - GET
-          - POST
-          - PUT
-          - PATCH
-          - DELETE
-          - OPTIONS
-        accessControlAllowHeaders:
-          - Authorization
-          - Content-Type
-          - Accept
-          - Origin
-          - X-Requested-With
-          - ngrok-skip-browser-warning
-        accessControlAllowCredentials: true
-        accessControlMaxAge: 86400
-
-    # 🌐 CORS para túneles ngrok (si los sigues usando)
-    cors-allow-public:
-      headers:
-        accessControlAllowOriginListRegex:
-          - "^https://[a-z0-9-]+\\.ngrok-free\\.app$"
-        accessControlAllowMethods: [GET, POST, PUT, PATCH, DELETE, OPTIONS]
-        accessControlAllowHeaders:
-          - Authorization
-          - Content-Type
-          - Accept
-          - Origin
-          - X-Requested-With
-          - ngrok-skip-browser-warning
-        accessControlAllowCredentials: true
-        accessControlMaxAge: 86400
-
     # 🌐 CORS para localhost + TU DOMINIO
     cors-allow-local:
       headers:
@@ -63,8 +25,6 @@ http:
     cors-chain:
       chain:
         middlewares:
-          - cors-allow-exp
-          - cors-allow-public
           - cors-allow-local
 
   routers:
