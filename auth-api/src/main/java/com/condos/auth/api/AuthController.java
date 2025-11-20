@@ -188,29 +188,45 @@ public class AuthController {
             @PathVariable String id,
             @RequestBody ChangePasswordReq req
     ) {
-        // ===== Validar JWT =====
         if (authorization == null || !authorization.startsWith("Bearer ")) {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED);
         }
 
         var jws = jwt.parse(authorization.substring(7));
+
         @SuppressWarnings("unchecked")
-        List<Map<String, String>> orgs =
+        List<Map<String, String>> requesterOrgs =
                 (List<Map<String, String>>) jws.getBody().get("orgs");
 
-        boolean isSuper = orgs != null &&
-                orgs.stream().anyMatch(o -> "SUPERADMIN".equalsIgnoreCase(o.get("role")));
+        boolean isSuper = requesterOrgs.stream()
+                .anyMatch(o -> "SUPERADMIN".equalsIgnoreCase(o.get("role")));
 
-        if (!isSuper) {
+        boolean isAdmin = requesterOrgs.stream()
+                .anyMatch(o -> "ADMINISTRADOR".equalsIgnoreCase(o.get("role")));
+
+        // ===== Si no es super ni admin → prohibido =====
+        if (!isSuper && !isAdmin) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "not allowed");
         }
 
-        // ===== Validar request =====
+        // ===== Si es admin, verificar que el target pertenece a alguna de sus orgs =====
+        if (!isSuper) {
+            var targetAssignments = userApi.getAssignmentsByUserId(id).block();
+            boolean sameOrg = targetAssignments.stream().anyMatch(ta ->
+                    requesterOrgs.stream().anyMatch(ro ->
+                            ro.get("orgId").equals(ta.orgId())
+                    )
+            );
+            if (!sameOrg) {
+                throw new ResponseStatusException(HttpStatus.FORBIDDEN, "not allowed (different org)");
+            }
+        }
+
+        // ===== Validar password =====
         if (req.newPassword() == null || req.newPassword().isBlank()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "password required");
         }
 
-        // ===== Actualizar AuthAccount =====
         var acc = accounts.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "account not found"));
 
@@ -219,7 +235,6 @@ public class AuthController {
 
         accounts.save(acc);
     }
-
     @PatchMapping("/users/{id}/email")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void changeEmail(
@@ -227,34 +242,45 @@ public class AuthController {
             @PathVariable String id,
             @RequestBody ChangeEmailReq req
     ) {
-        // ===== Validar JWT =====
         if (authorization == null || !authorization.startsWith("Bearer ")) {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED);
         }
 
         var jws = jwt.parse(authorization.substring(7));
-        String requesterId = jws.getBody().getSubject();
         @SuppressWarnings("unchecked")
-        List<Map<String, String>> orgs =
+        List<Map<String, String>> requesterOrgs =
                 (List<Map<String, String>>) jws.getBody().get("orgs");
 
-        boolean isSuper = orgs != null &&
-                orgs.stream().anyMatch(o -> "SUPERADMIN".equalsIgnoreCase(o.get("role")));
+        boolean isSuper = requesterOrgs.stream()
+                .anyMatch(o -> "SUPERADMIN".equalsIgnoreCase(o.get("role")));
 
-        // Decide tu política:
-        // solo SUPERADMIN, o SUPERADMIN o el propio usuario.
-        if (!isSuper && !Objects.equals(requesterId, id)) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "not allowed");
+        boolean isAdmin = requesterOrgs.stream()
+                .anyMatch(o -> "ADMINISTRADOR".equalsIgnoreCase(o.get("role")));
+
+        // SUPERADMIN puede todo
+        if (!isSuper) {
+            if (!isAdmin) {
+                throw new ResponseStatusException(HttpStatus.FORBIDDEN, "not allowed");
+            }
+
+            // ADMIN solo si el target pertenece a su org
+            var targetAssignments = userApi.getAssignmentsByUserId(id).block();
+            boolean sameOrg = targetAssignments.stream().anyMatch(ta ->
+                    requesterOrgs.stream().anyMatch(ro ->
+                            ro.get("orgId").equals(ta.orgId())
+                    )
+            );
+            if (!sameOrg) {
+                throw new ResponseStatusException(HttpStatus.FORBIDDEN, "not allowed (different org)");
+            }
         }
 
-        // ===== Validar request =====
         if (req.newEmail() == null || req.newEmail().isBlank()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "email required");
         }
 
         String normalized = normEmail(req.newEmail());
 
-        // (opcional pero recomendable) validar que no exista otro account con ese email
         accounts.findByEmail(normalized).ifPresent(existing -> {
             if (!existing.id.equals(id)) {
                 throw new ResponseStatusException(HttpStatus.CONFLICT, "email already in use");
