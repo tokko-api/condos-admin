@@ -20,6 +20,7 @@ public class CorsConfig {
         config.setAllowedOrigins(List.of(
                 "http://localhost:3000",
                 "http://localhost:8081",
+                "http://condosadmin.site",
                 "https://condosadmin.site",
                 "https://www.condosadmin.site"
         ));
