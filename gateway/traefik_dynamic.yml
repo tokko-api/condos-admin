@@ -125,7 +125,7 @@ http:
       # si no tienes 'dash-auth' definido, quítalo o créalo
       # middlewares: ["dash-auth"]
     r-frontend:
-      rule: "Host(`condosadmin.site`) || Host(`www.condosadmin.site`)"
+      rule: "Host(`condosadmin.site`)"
       entryPoints: ["websecure"]
       service: s-frontend
       tls:
