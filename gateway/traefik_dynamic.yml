@@ -124,6 +124,12 @@ http:
         certResolver: le
       # si no tienes 'dash-auth' definido, quítalo o créalo
       # middlewares: ["dash-auth"]
+    r-frontend:
+      rule: "Host(`condosadmin.site`) || Host(`www.condosadmin.site`)"
+      entryPoints: ["websecure"]
+      service: s-frontend
+      tls:
+        certResolver: le
 
   services:
     s-auth:
@@ -147,3 +153,7 @@ http:
         passHostHeader: true
         servers:
           - url: "http://minio:9000"
+    s-frontend:
+      loadBalancer:
+        servers:
+          - url: "http://frontend:80"
