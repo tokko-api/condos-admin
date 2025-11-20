@@ -117,7 +117,14 @@ services:
       #interval: 10s
       #timeout: 3s
       #retries: 5
-
+  frontend:
+    image: nginx:alpine
+    container_name: condos-frontend
+    restart: unless-stopped
+    volumes:
+      - /opt/condosadmin-frontend/app/dist:/usr/share/nginx/html:ro
+    networks:
+      - default
 networks:
   default:
     name: ${NETWORK_NAME}
