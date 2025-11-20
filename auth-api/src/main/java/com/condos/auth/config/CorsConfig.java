@@ -16,29 +16,14 @@ public class CorsConfig {
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration config = new CorsConfiguration();
 
-        // 🔥 Agrega todos los orígenes que deben poder llamar auth-api
-        config.setAllowedOrigins(List.of(
-                "http://localhost:3000",
-                "http://localhost:8081",
-                "http://condosadmin.site",
-                "https://condosadmin.site",
-                "https://www.condosadmin.site"
-        ));
+        // 🔥 Para probar: permite TODOS los orígenes
+        // (Spring, con allowedOriginPatterns("*"), devuelve SIEMPRE el Origin de la petición)
+        config.setAllowedOriginPatterns(List.of("*"));
 
-        config.setAllowedMethods(Arrays.asList(
-                "GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"
-        ));
-
-        config.setAllowedHeaders(Arrays.asList(
-                "Authorization",
-                "Content-Type",
-                "Accept",
-                "Origin",
-                "X-Requested-With",
-                "ngrok-skip-browser-warning"
-        ));
-
+        config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
+        config.setAllowedHeaders(List.of("*"));
         config.setAllowCredentials(true);
+        config.setMaxAge(86400L);
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", config);
