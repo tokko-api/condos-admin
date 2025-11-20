@@ -177,4 +177,37 @@ public class AuthController {
                 .map(OrgRole::role)
                 .toList();
     }
+
+    public record ChangePasswordReq(String newPassword) {}
+    public record ChangeEmailReq(String newEmail) {}
+
+    @PatchMapping("/users/{id}/password")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void changePassword(@PathVariable String id, @RequestBody ChangePasswordReq req) {
+        if (req.newPassword() == null || req.newPassword().isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "password required");
+        }
+        var acc = accounts.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "account not found"));
+
+        acc.passwordHash = passwordEncoder.encode(req.newPassword().trim());
+        // si usas accountVersion para invalidar tokens viejos:
+        acc.accountVersion = acc.accountVersion == null ? 1L : acc.accountVersion + 1;
+
+        accounts.save(acc);
+    }
+
+    @PatchMapping("/users/{id}/email")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void changeEmail(@PathVariable String id, @RequestBody ChangeEmailReq req) {
+        if (req.newEmail() == null || req.newEmail().isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "email required");
+        }
+        String normalized = normEmail(req.newEmail());
+        var acc = accounts.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "account not found"));
+
+        acc.email = normalized;
+        accounts.save(acc);
+    }
 }

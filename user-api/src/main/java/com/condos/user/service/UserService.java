@@ -138,8 +138,14 @@ public class UserService {
     }
     public UserSummary update(String id, UpdateUserRequest req) {
         var up = repo.findById(id).orElseThrow(() -> new ResponseStatusException(NOT_FOUND));
-        if (req.fullName() != null) up.fullName = req.fullName();
-        if (req.email() != null)    up.email = req.email();
+
+        if (req.fullName() != null && !req.fullName().isBlank()) {
+            up.fullName = req.fullName().trim();
+        }
+        if (req.email() != null && !req.email().isBlank()) {
+            up.email = req.email().trim().toLowerCase(Locale.ROOT);
+        }
+
         repo.save(up);
         return toSummary(up);
     }
