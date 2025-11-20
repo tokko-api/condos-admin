@@ -183,15 +183,38 @@ public class AuthController {
 
     @PatchMapping("/users/{id}/password")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void changePassword(@PathVariable String id, @RequestBody ChangePasswordReq req) {
+    public void changePassword(
+            @RequestHeader("Authorization") String authorization,
+            @PathVariable String id,
+            @RequestBody ChangePasswordReq req
+    ) {
+        // ===== Validar JWT =====
+        if (authorization == null || !authorization.startsWith("Bearer ")) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED);
+        }
+
+        var jws = jwt.parse(authorization.substring(7));
+        @SuppressWarnings("unchecked")
+        List<Map<String, String>> orgs =
+                (List<Map<String, String>>) jws.getBody().get("orgs");
+
+        boolean isSuper = orgs != null &&
+                orgs.stream().anyMatch(o -> "SUPERADMIN".equalsIgnoreCase(o.get("role")));
+
+        if (!isSuper) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "not allowed");
+        }
+
+        // ===== Validar request =====
         if (req.newPassword() == null || req.newPassword().isBlank()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "password required");
         }
+
+        // ===== Actualizar AuthAccount =====
         var acc = accounts.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "account not found"));
 
         acc.passwordHash = passwordEncoder.encode(req.newPassword().trim());
-        // si usas accountVersion para invalidar tokens viejos:
         acc.accountVersion = acc.accountVersion == null ? 1L : acc.accountVersion + 1;
 
         accounts.save(acc);
@@ -199,11 +222,45 @@ public class AuthController {
 
     @PatchMapping("/users/{id}/email")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void changeEmail(@PathVariable String id, @RequestBody ChangeEmailReq req) {
+    public void changeEmail(
+            @RequestHeader("Authorization") String authorization,
+            @PathVariable String id,
+            @RequestBody ChangeEmailReq req
+    ) {
+        // ===== Validar JWT =====
+        if (authorization == null || !authorization.startsWith("Bearer ")) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED);
+        }
+
+        var jws = jwt.parse(authorization.substring(7));
+        String requesterId = jws.getBody().getSubject();
+        @SuppressWarnings("unchecked")
+        List<Map<String, String>> orgs =
+                (List<Map<String, String>>) jws.getBody().get("orgs");
+
+        boolean isSuper = orgs != null &&
+                orgs.stream().anyMatch(o -> "SUPERADMIN".equalsIgnoreCase(o.get("role")));
+
+        // Decide tu política:
+        // solo SUPERADMIN, o SUPERADMIN o el propio usuario.
+        if (!isSuper && !Objects.equals(requesterId, id)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "not allowed");
+        }
+
+        // ===== Validar request =====
         if (req.newEmail() == null || req.newEmail().isBlank()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "email required");
         }
+
         String normalized = normEmail(req.newEmail());
+
+        // (opcional pero recomendable) validar que no exista otro account con ese email
+        accounts.findByEmail(normalized).ifPresent(existing -> {
+            if (!existing.id.equals(id)) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT, "email already in use");
+            }
+        });
+
         var acc = accounts.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "account not found"));
 
