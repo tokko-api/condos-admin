@@ -40,6 +40,7 @@ public class SecurityConfig {
                                 "/v3/api-docs",
                                 "/v3/api-docs/**"
                         ).permitAll()
+                        .requestMatchers(HttpMethod.PATCH, "/condos/api/auth/users/**").permitAll()
                         .anyRequest().authenticated()
                 );
         // Nota: auth-api no necesita validar JWT de terceros; /auth/me sí parsea JWT con JwtService.
