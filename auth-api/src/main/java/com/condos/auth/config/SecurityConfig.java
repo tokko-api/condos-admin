@@ -53,23 +53,5 @@ public class SecurityConfig {
     }
 
     @Bean
-    public CorsConfigurationSource corsConfigurationSource() {
-        CorsConfiguration config = new CorsConfiguration();
-
-        // 🔥 Para probar: permite TODOS los orígenes
-        // (Spring, con allowedOriginPatterns("*"), devuelve SIEMPRE el Origin de la petición)
-        config.setAllowedOriginPatterns(List.of("*"));
-
-        config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
-        config.setAllowedHeaders(List.of("*"));
-        config.setAllowCredentials(true);
-        config.setMaxAge(86400L);
-
-        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
-        source.registerCorsConfiguration("/**", config);
-        return source;
-    }
-
-    @Bean
     PasswordEncoder passwordEncoder() { return new BCryptPasswordEncoder(); }
 }
