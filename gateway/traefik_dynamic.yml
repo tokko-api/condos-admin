@@ -10,6 +10,9 @@ http:
           - "https://condosadmin.site"
           - "https://www.condosadmin.site"
           - "https://api.condosadmin.site"
+          - "https://tokko.com.mx"
+          - "https://www.tokko.com.mx"
+          - "https://api.tokko.com.mx"
         accessControlAllowMethods: [GET, POST, PUT, PATCH, DELETE, OPTIONS]
         accessControlAllowHeaders:
           - Authorization
@@ -28,6 +31,12 @@ http:
           - cors-allow-local
 
   routers:
+    r-tokko-web:
+      rule: "Host(`tokko.com.mx`) || Host(`www.tokko.com.mx`)"
+      service: s-tokko-web
+      entryPoints: ["websecure"]
+      tls:
+        certResolver: le
     # ====== APIs (todas bajo api.condosadmin.site) ======
     r-auth:
       rule: "Host(`api.condosadmin.site`) && PathPrefix(`/condos/api/auth`)"
@@ -118,3 +127,7 @@ http:
       loadBalancer:
         servers:
           - url: "http://frontend:80"
+    s-tokko-web:
+      loadBalancer:
+        servers:
+          - url: "http://tokko-web:5173"
