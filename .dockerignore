@@ -1,0 +1,31 @@
+# Build outputs (se compilan dentro de la imagen)
+**/target/
+**/build/
+**/dist/
+
+# Git / IDE / OS
+.git/
+.gitignore
+.idea/
+*.iml
+.vscode/
+.DS_Store
+**/.DS_Store
+
+# Datos runtime y secretos (NUNCA deben entrar a la imagen)
+volumes/
+minio-data/
+.env
+.env.*
+!.env.example
+acme.json
+
+# Node / Expo (frontend, no aplica al build de las APIs)
+node_modules/
+.expo/
+
+# Docs y misc (no necesarios para compilar)
+docs/
+*.log
+*.bak
+*.tmp

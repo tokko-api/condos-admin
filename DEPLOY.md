@@ -85,7 +85,7 @@ mkdir -p /opt/condos-admin
 cd /opt/condos-admin
 
 # Clonar repositorio
-git clone https://github.com/tu-usuario/condos-admin.git .
+git clone https://github.com/tokko-api/condos-admin.git .
 
 # O copiar archivos via scp
 # scp -r ./condos-admin condosadmin@tu-droplet:/opt/
@@ -116,6 +116,10 @@ MONGO_PORT=27017
 # (debe coincidir con el usuario/password usados en SPRING_DATA_MONGODB_URI abajo)
 APP_MONGO_USER=<generar-usuario-seguro>
 APP_MONGO_PASSWORD=<generar-password-seguro>
+
+# URI que usan los microservicios. Usa APP_MONGO_USER/APP_MONGO_PASSWORD y
+# authSource=condos (init.js crea ese usuario en la DB "condos", no en admin).
+SPRING_DATA_MONGODB_URI=mongodb://<APP_MONGO_USER>:<APP_MONGO_PASSWORD>@mongo:27017/condos?authSource=condos
 
 # JWT (CAMBIAR ESTOS VALORES)
 JWT_SECRET=<generar-secreto-64-caracteres>
@@ -164,8 +168,14 @@ http:
 
 ### 4. Construir y levantar servicios
 
+> Los `Dockerfile` son **multi-stage**: compilan cada microservicio con Maven
+> dentro de la imagen (etapa `build`) y solo dejan el `.jar` en la imagen final.
+> Por eso en el Droplet **solo necesitas Docker** — no hace falta instalar Maven
+> ni el JDK, ni subir los `target/`. El primer `build` tarda (descarga Maven +
+> dependencias); los siguientes usan cache.
+
 ```bash
-# Construir imagenes
+# Construir imagenes (compila dentro de Docker)
 docker compose build
 
 # Levantar servicios

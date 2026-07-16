@@ -94,7 +94,9 @@ services:
   # Auth API - Authentication Service
   # ===========================================
   auth-api:
-    build: ./auth-api
+    build:
+      context: .
+      dockerfile: auth-api/Dockerfile
     container_name: ${PROJECT_NAME:-condos}-auth-api
     restart: unless-stopped
     environment:
@@ -118,7 +120,9 @@ services:
   # Tenant API - Multi-tenant Management
   # ===========================================
   tenant-api:
-    build: ./tenant-api
+    build:
+      context: .
+      dockerfile: tenant-api/Dockerfile
     container_name: ${PROJECT_NAME:-condos}-tenant-api
     restart: unless-stopped
     environment:
@@ -142,7 +146,9 @@ services:
   # User API - User Management
   # ===========================================
   user-api:
-    build: ./user-api
+    build:
+      context: .
+      dockerfile: user-api/Dockerfile
     container_name: ${PROJECT_NAME:-condos}-user-api
     restart: unless-stopped
     environment:
@@ -167,7 +173,9 @@ services:
   # Board API - Task/Board Management
   # ===========================================
   board-api:
-    build: ./board-api
+    build:
+      context: .
+      dockerfile: board-api/Dockerfile
     container_name: ${PROJECT_NAME:-condos}-board-api
     restart: unless-stopped
     environment:
