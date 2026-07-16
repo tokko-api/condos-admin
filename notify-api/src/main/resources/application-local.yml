@@ -4,7 +4,7 @@ server:
 spring:
   data:
     mongodb:
-      uri: mongodb://app_user:app_passT3st@localhost:27017/condos?authSource=condos
+      uri: ${SPRING_DATA_MONGODB_URI:mongodb://localhost:27017/condos}
 
 logging:
   level:

@@ -8,10 +8,10 @@ spring:
       - org.springframework.boot.autoconfigure.jdbc.DataSourceTransactionManagerAutoConfiguration
       - org.springframework.boot.autoconfigure.orm.jpa.HibernateJpaAutoConfiguration
   profiles:
-    active: dev
+    active: ${SPRING_PROFILES_ACTIVE:dev}
   data:
     mongodb:
-      uri: mongodb://***REMOVED***:***REMOVED***@mongo:27017/condos?authSource=condos
+      uri: ${SPRING_DATA_MONGODB_URI}
   main:
     allow-bean-definition-overriding: true
 
@@ -20,47 +20,52 @@ management:
     web:
       exposure:
         include: health,info
+  endpoint:
+    health:
+      show-details: never
 
 logging:
   level:
-    root: INFO
-    org.springframework: WARN
-    org.springframework.security: WARN
-    com.condos: DEBUG
+    root: ${LOG_LEVEL:INFO}
+    org.springframework: ${SPRING_LOG_LEVEL:WARN}
+    org.springframework.security: ${SECURITY_LOG_LEVEL:WARN}
+    com.condos: ${APP_LOG_LEVEL:DEBUG}
 
 user:
   api:
-    # si usas el endpoint interno:
-    base-url: http://user-api:8080/condos/api/user
-    internal-path: /internal   #
+    base-url: ${USER_API_URL:http://user-api:8080/condos/api/user}
+    internal-path: /internal
 
 app:
   errors:
-    verbose: true
+    verbose: ${ERRORS_VERBOSE:false}
   security:
     jwt:
-      secret: ${JWT_SECRET:change-me-please-32bytes-minimum-secret-key!!}
+      secret: ${JWT_SECRET}
       issuer: condos-auth
       expires-minutes: ${JWT_EXPIRES_MINUTES:240}
 
+# MinIO Object Storage Configuration
 minio:
-  endpoint: http://minio:9000
-  accessKey: ${MINIO_ACCESS_KEY:admin}
-  secretKey: ${MINIO_SECRET_KEY:admin12345}
-  bucket: condos-attachments
-  region: us-east-1
-  presignMinutes: 10
+  endpoint: ${MINIO_ENDPOINT:http://minio:9000}
+  accessKey: ${MINIO_ROOT_USER:minioadmin}
+  secretKey: ${MINIO_ROOT_PASSWORD:minioadmin}
+  bucket: ${MINIO_BUCKET:condos-attachments}
+  region: ${MINIO_REGION:us-east-1}
+  presignMinutes: ${MINIO_PRESIGN_MINUTES:10}
 
+# Public API URLs (for generating public links)
 public:
   api:
-    base: https://api.condosadmin.site
+    base: ${PUBLIC_API_BASE:https://api.condosadmin.site}
   minio:
-    base: https://api.condosadmin.site/minio
+    base: ${PUBLIC_MINIO_BASE:https://api.condosadmin.site/minio}
 
+# Storage Configuration
 storage:
-  bucket: condos-attachments
-  externalEndpoint: https://api.condosadmin.site
-  region: us-east-1
-  accessKey: admin
-  secretKey: admin12345
-  expiresSeconds: 600
+  bucket: ${MINIO_BUCKET:condos-attachments}
+  externalEndpoint: ${PUBLIC_API_BASE:https://api.condosadmin.site}
+  region: ${MINIO_REGION:us-east-1}
+  accessKey: ${MINIO_ROOT_USER:minioadmin}
+  secretKey: ${MINIO_ROOT_PASSWORD:minioadmin}
+  expiresSeconds: ${STORAGE_PRESIGN_SECONDS:600}

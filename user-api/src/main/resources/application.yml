@@ -8,10 +8,10 @@ spring:
       - org.springframework.boot.autoconfigure.jdbc.DataSourceTransactionManagerAutoConfiguration
       - org.springframework.boot.autoconfigure.orm.jpa.HibernateJpaAutoConfiguration
   profiles:
-    active: dev
+    active: ${SPRING_PROFILES_ACTIVE:dev}
   data:
     mongodb:
-      uri: mongodb://app_user:app_passT3st@mongo:27017/condos?authSource=condos
+      uri: ${SPRING_DATA_MONGODB_URI}
   main:
     allow-bean-definition-overriding: true
 
@@ -20,23 +20,26 @@ management:
     web:
       exposure:
         include: health,info
+  endpoint:
+    health:
+      show-details: never
 
 logging:
   level:
-    root: INFO
-    org.springframework: WARN
-    com.condos: DEBUG
+    root: ${LOG_LEVEL:INFO}
+    org.springframework: ${SPRING_LOG_LEVEL:WARN}
+    com.condos: ${APP_LOG_LEVEL:DEBUG}
 
 auth:
   api:
-    base-url: http://auth-api:8080/condos/api/auth
-    secret: change-me-please-32bytes-minimum-secret-key!!
+    base-url: ${AUTH_API_URL:http://auth-api:8080/condos/api/auth}
+    secret: ${INTERNAL_API_SECRET:change-me-in-production}
 
 app:
   errors:
-    verbose: true
+    verbose: ${ERRORS_VERBOSE:false}
   security:
     jwt:
-      secret: ${JWT_SECRET:change-me-please-32bytes-minimum-secret-key!!}
+      secret: ${JWT_SECRET}
       issuer: condos-auth
       expires-minutes: ${JWT_EXPIRES_MINUTES:240}
