@@ -40,15 +40,21 @@ services:
     image: mongo:7
     container_name: ${PROJECT_NAME:-condos}-mongo
     restart: unless-stopped
-    ports:
-      - "${MONGO_PORT:-27017}:27017"
+    # NOTA DE SEGURIDAD: NO publicar el puerto de Mongo al host.
+    # Docker manipula iptables directamente y normalmente evita las reglas de ufw,
+    # así que "ports:" aquí expondría Mongo a internet aunque el firewall diga
+    # lo contrario. Los servicios lo consumen por la red interna (mongo:27017).
+    # Si necesitas acceso puntual para debug, usa un túnel SSH en vez de exponer el puerto:
+    #   ssh -L 27017:localhost:27017 usuario@tu-droplet
     environment:
       MONGO_INITDB_ROOT_USERNAME: ${MONGO_INITDB_ROOT_USERNAME:?MONGO_INITDB_ROOT_USERNAME is required}
       MONGO_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD:?MONGO_INITDB_ROOT_PASSWORD is required}
       MONGO_INITDB_DATABASE: ${MONGO_INITDB_DATABASE:-condos}
+      APP_MONGO_USER: ${APP_MONGO_USER:?APP_MONGO_USER is required}
+      APP_MONGO_PASSWORD: ${APP_MONGO_PASSWORD:?APP_MONGO_PASSWORD is required}
     volumes:
       - mongo_data:/data/db:Z
-      - ./mongo-init:/docker-entrypoint-initdb.d:ro,Z
+      - ./mongo_init:/docker-entrypoint-initdb.d:ro,Z
     networks:
       - default
     healthcheck:
@@ -66,9 +72,10 @@ services:
     container_name: ${PROJECT_NAME:-condos}-attachments
     restart: unless-stopped
     command: server /data --console-address ":9001"
-    ports:
-      - "${MINIO_PORT:-9000}:9000"
-      - "${MINIO_CONSOLE_PORT:-9001}:9001"
+    # NOTA DE SEGURIDAD: NO publicar los puertos de MinIO al host (mismo motivo
+    # que en mongo arriba). board-api accede por la red interna (minio:9000).
+    # Si necesitas la consola admin (9001) puntualmente, usa un túnel SSH:
+    #   ssh -L 9001:localhost:9001 usuario@tu-droplet
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-dsfgsdfg34513}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-dsfgsdfg34513}
@@ -168,8 +175,8 @@ services:
       SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-dev}
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
       JWT_EXPIRES_MINUTES: ${JWT_EXPIRES_MINUTES:-240}
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-dsfgsdfg34513}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-dsfgsdfg34513}
     networks:
       - default
     healthcheck:
@@ -183,6 +190,14 @@ services:
         condition: service_healthy
       minio:
         condition: service_healthy
+
+  # ===========================================
+  # NOTA: notify-api NO se incluye aquí.
+  # Su código fuente es una copia duplicada de auth-api
+  # (mismo pom artifactId "auth-api", mismos paquetes com.condos.auth.*).
+  # Pendiente de aclarar con el equipo qué debía contener realmente
+  # antes de desplegarlo. Ver seccion de notas en DEPLOY.md.
+  # ===========================================
 
   # ===========================================
   # Frontend (Optional - if serving static files)

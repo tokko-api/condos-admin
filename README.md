@@ -37,7 +37,6 @@ Sistema de administracion de condominios basado en microservicios con Spring Boo
 | tenant-api  | Gestion multi-tenant (organizaciones)   | 8080   |
 | user-api    | Gestion de usuarios y perfiles          | 8080   |
 | board-api   | Tableros, tareas y archivos adjuntos    | 8080   |
-| notify-api  | Notificaciones (futuro)                  | 8080   |
 
 ## Requisitos
 
@@ -137,7 +136,6 @@ condos-admin/
 ├── tenant-api/            # Gestion de organizaciones
 ├── user-api/              # Gestion de usuarios
 ├── board-api/             # Tableros y tareas
-├── notify-api/            # Notificaciones (futuro)
 ├── shared-lib/            # Libreria compartida (JWT, DTOs)
 ├── gateway/               # Configuracion de Traefik
 ├── docker-compose.yml     # Orquestacion de contenedores

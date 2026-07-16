@@ -112,6 +112,11 @@ MONGO_INITDB_ROOT_PASSWORD=<generar-password-seguro>
 MONGO_INITDB_DATABASE=condos
 MONGO_PORT=27017
 
+# Usuario de aplicacion creado por mongo_init/init.js al primer arranque
+# (debe coincidir con el usuario/password usados en SPRING_DATA_MONGODB_URI abajo)
+APP_MONGO_USER=<generar-usuario-seguro>
+APP_MONGO_PASSWORD=<generar-password-seguro>
+
 # JWT (CAMBIAR ESTOS VALORES)
 JWT_SECRET=<generar-secreto-64-caracteres>
 JWT_EXPIRES_MINUTES=240
@@ -334,12 +339,27 @@ rm acme.json && docker compose restart traefik
 
 ## Seguridad Adicional
 
-### 1. Deshabilitar acceso directo a MongoDB
+### 1. Puertos de MongoDB y MinIO (ya no se exponen por defecto)
+
+El `docker-compose.yml` de este repo **ya no publica** los puertos de Mongo (27017)
+ni de MinIO (9000/9001) al host. Docker manipula `iptables` directamente y suele
+**evitar las reglas de `ufw`**, asi que publicarlos expondria estos servicios a
+internet aunque el firewall diga lo contrario. Ambos servicios solo se acceden
+por la red interna de Docker (`mongo:27017`, `minio:9000`).
+
+Si necesitas acceso puntual para debug, usa un tunel SSH en vez de exponer el puerto:
 
 ```bash
-# Editar docker-compose.yml para no exponer el puerto de MongoDB
-# Comentar la linea: - "${MONGO_PORT:-27017}:27017"
+ssh -L 27017:localhost:27017 usuario@tu-droplet   # Mongo
+ssh -L 9001:localhost:9001 usuario@tu-droplet     # Consola MinIO
 ```
+
+### 2. notify-api no se despliega todavia
+
+El modulo `notify-api` en este repo es actualmente una copia duplicada de
+`auth-api` (mismo `artifactId` en su `pom.xml`, mismos paquetes `com.condos.auth.*`).
+No esta incluido en `docker-compose.yml` hasta aclarar que debia contener
+realmente. No lo agregues al despliegue sin revisar/reescribir su codigo primero.
 
 ### 2. Configurar fail2ban (opcional)
 
