@@ -40,6 +40,7 @@ public class SecurityConfig {
         http.csrf(csrf -> csrf.disable());
 
         http.authorizeHttpRequests(auth -> auth
+                .requestMatchers("/actuator/health").permitAll()   // healthcheck de Docker (igual que las otras APIs)
                 .requestMatchers("/internal/**").permitAll()
                 .requestMatchers("/condos/api/user/internal/**").permitAll()// libre para auth-api
                 .anyRequest().authenticated()                  // el resto con JWT
