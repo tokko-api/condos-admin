@@ -97,14 +97,15 @@ http:
         certResolver: le
       # si no tienes 'dash-auth' definido, quítalo o créalo
       # middlewares: ["dash-auth"]
-    # NOTA: r-frontend deshabilitado - el servicio "frontend" está comentado
-    # en docker-compose.yml (no se sirve estático aquí todavía).
-    # r-frontend:
-    #   rule: "Host(`condosadmin.site`)"
-    #   entryPoints: ["websecure"]
-    #   service: s-frontend
-    #   tls:
-    #     certResolver: le
+    # Frontend web (Expo export estático servido por nginx en el contenedor 'frontend').
+    # Solo el apex condosadmin.site (www no tiene registro DNS todavía; si lo agregas,
+    # añade Host(`www.condosadmin.site`) aquí).
+    r-frontend:
+      rule: "Host(`condosadmin.site`)"
+      entryPoints: ["websecure"]
+      service: s-frontend
+      tls:
+        certResolver: le
 
   services:
     s-auth:
@@ -131,10 +132,10 @@ http:
         passHostHeader: true
         servers:
           - url: "http://minio:9000"
-    # s-frontend:
-    #   loadBalancer:
-    #     servers:
-    #       - url: "http://frontend:80"
+    s-frontend:
+      loadBalancer:
+        servers:
+          - url: "http://frontend:80"
     # s-tokko-web:
     #   loadBalancer:
     #     servers:
