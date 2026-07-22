@@ -102,6 +102,8 @@ services:
       SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-dev}
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
       JWT_EXPIRES_MINUTES: ${JWT_EXPIRES_MINUTES:-240}
+      # Debe coincidir con el que usa user-api para llamar a /internal/accounts
+      INTERNAL_API_SECRET: ${INTERNAL_API_SECRET:-change-me}
     networks:
       - default
     healthcheck:

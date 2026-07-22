@@ -28,7 +28,7 @@ public class AuthApiClientImpl implements AuthApiClient {
         record Resp(String id, String email) {}
 
         Resp resp = webClient.post()
-                .uri("/internal/accounts")
+                .uri("/condos/api/auth/internal/accounts")
                 .header("X-Internal-Secret", internalSecret)   // ✅ importante
                 .contentType(MediaType.APPLICATION_JSON)
                 .bodyValue(new CreateReq(email, rawPassword))
@@ -46,7 +46,7 @@ public class AuthApiClientImpl implements AuthApiClient {
     public Optional<String> findAccountIdByEmail(String email) {
         record Resp(String id, String email) {}
         return webClient.get()
-                .uri(uri -> uri.path("/internal/accounts/by-email")
+                .uri(uri -> uri.path("/condos/api/auth/internal/accounts/by-email")
                         .queryParam("email", email).build())
                 .header("X-Internal-Secret", internalSecret)   // ✅ importante
                 .retrieve()
