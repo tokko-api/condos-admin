@@ -78,6 +78,11 @@
             <optional>true</optional>
         </dependency>
 
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-api</artifactId>
+        </dependency>
+
         <!-- JSON (si usas records/DTO serializados) -->
         <dependency>
             <groupId>com.fasterxml.jackson.core</groupId>
