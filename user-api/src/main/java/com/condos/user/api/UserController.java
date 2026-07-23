@@ -59,21 +59,19 @@ public class UserController {
         return service.update(id, req);
     }
 
-    @PutMapping("/users/{id}/orgs/{orgId}/role")
-    @PreAuthorize("""
-        @jwtAuth.isSuperadmin(authentication) or
-       @PreAuthorize("@jwtAuth.canManage(authentication, #orgId, #targetRole)")
-    """)
+    @RequestMapping(value = "/users/{id}/orgs/{orgId}/role", method = {RequestMethod.PUT, RequestMethod.PATCH})
+    @PreAuthorize("@jwtAuth.isSuperadmin(authentication) or @jwtAuth.canManage(authentication, #orgId, #req.role())")
     public UserSummary changeRole(@PathVariable String id, @PathVariable String orgId,
                                   @RequestBody ChangeRoleRequest req) {
-        // Si es ADMIN, solo puede asignar SUPERVISOR u OPERATIVO
+        // Validate allowed roles
         if (!"SUPERADMIN".equals(req.role()) && !"ADMINISTRADOR".equals(req.role())
                 && !"SUPERVISOR".equals(req.role()) && !"OPERATIVO".equals(req.role())) {
-            throw new org.springframework.web.server.ResponseStatusException(
-                    org.springframework.http.HttpStatus.BAD_REQUEST, "invalid role");
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST, "invalid role");
         }
         return service.changeRole(id, orgId, req.role());
     }
+
 
     @PatchMapping(value = "/users/{id}/orgs/{orgId}/status")
     @PreAuthorize("@jwtAuth.isSuperadmin(authentication) or @jwtAuth.canManage(authentication, #orgId)")
