@@ -11,6 +11,7 @@ COPY auth-api/pom.xml auth-api/
 COPY tenant-api/pom.xml tenant-api/
 COPY user-api/pom.xml user-api/
 COPY board-api/pom.xml board-api/
+COPY billing-api/pom.xml billing-api/
 RUN mvn -pl board-api -am -DskipTests dependency:go-offline || true
 
 # 2) Fuentes necesarias (este modulo + shared-lib) y build del jar
