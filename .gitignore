@@ -92,4 +92,7 @@ coverage/
 *.backup
 *.orig
 *.tmp
-*.temp
+*.tempdocker-compose.override.yml
+docker-compose.override.yml
+.env
+acme.json

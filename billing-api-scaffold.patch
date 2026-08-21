@@ -1,0 +1,2055 @@
+diff --git a/billing-api/Dockerfile b/billing-api/Dockerfile
+new file mode 100644
+index 0000000..1f76a96
+--- /dev/null
++++ b/billing-api/Dockerfile
+@@ -0,0 +1,28 @@
++# ===== build stage: compila el modulo con Maven (contexto = raiz del repo) =====
++FROM maven:3.9-eclipse-temurin-17 AS build
++WORKDIR /workspace
++
++# 1) POMs primero: el pom agregador referencia TODOS los modulos, asi que
++#    deben existir para construir el reactor, aunque solo compilemos este.
++#    Copiar solo los POMs permite cachear la descarga de dependencias.
++COPY pom.xml ./
++COPY shared-lib/pom.xml shared-lib/
++COPY auth-api/pom.xml auth-api/
++COPY tenant-api/pom.xml tenant-api/
++COPY user-api/pom.xml user-api/
++COPY board-api/pom.xml board-api/
++COPY billing-api/pom.xml billing-api/
++RUN mvn -pl billing-api -am -DskipTests dependency:go-offline || true
++
++# 2) Fuentes necesarias (este modulo + shared-lib) y build del jar
++COPY shared-lib/src shared-lib/src
++COPY billing-api/src billing-api/src
++RUN mvn -pl billing-api -am -DskipTests clean package
++
++# ===== runtime stage =====
++FROM eclipse-temurin:17-jre
++WORKDIR /app
++COPY --from=build /workspace/billing-api/target/*.jar app.jar
++ENV JAVA_OPTS=""
++EXPOSE 8080
++ENTRYPOINT ["sh","-c","java $JAVA_OPTS -jar app.jar"]
+diff --git a/billing-api/pom.xml b/billing-api/pom.xml
+new file mode 100644
+index 0000000..6d8625b
+--- /dev/null
++++ b/billing-api/pom.xml
+@@ -0,0 +1,97 @@
++<project xmlns="http://maven.apache.org/POM/4.0.0"
++         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
++         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
++    <modelVersion>4.0.0</modelVersion>
++
++    <parent>
++        <groupId>com.condos</groupId>
++        <artifactId>condos-admin</artifactId>
++        <version>1.0.0</version>
++        <relativePath>../pom.xml</relativePath>
++    </parent>
++
++    <artifactId>billing-api</artifactId>
++    <name>billing-api</name>
++    <packaging>jar</packaging>
++
++    <dependencies>
++        <!-- shared-lib (JwtService, GlobalExceptionHandler, CorsConfig, etc.) -->
++        <dependency>
++            <groupId>com.condos</groupId>
++            <artifactId>shared-lib</artifactId>
++            <version>${project.version}</version>
++        </dependency>
++        <!-- Web + Security + Mongo -->
++        <dependency>
++            <groupId>org.springframework.boot</groupId>
++            <artifactId>spring-boot-starter-web</artifactId>
++        </dependency>
++        <dependency>
++            <groupId>org.springframework.boot</groupId>
++            <artifactId>spring-boot-starter-security</artifactId>
++        </dependency>
++        <dependency>
++            <groupId>org.springframework.boot</groupId>
++            <artifactId>spring-boot-starter-data-mongodb</artifactId>
++        </dependency>
++
++        <!-- JWT (jjwt) -->
++        <dependency>
++            <groupId>io.jsonwebtoken</groupId>
++            <artifactId>jjwt-api</artifactId>
++            <version>0.11.5</version>
++        </dependency>
++        <dependency>
++            <groupId>io.jsonwebtoken</groupId>
++            <artifactId>jjwt-impl</artifactId>
++            <version>0.11.5</version>
++            <scope>runtime</scope>
++        </dependency>
++        <dependency>
++            <groupId>io.jsonwebtoken</groupId>
++            <artifactId>jjwt-jackson</artifactId>
++            <version>0.11.5</version>
++            <scope>runtime</scope>
++        </dependency>
++
++        <dependency>
++            <groupId>org.projectlombok</groupId>
++            <artifactId>lombok</artifactId>
++            <optional>true</optional>
++        </dependency>
++
++        <!-- Actuator para healthcheck -->
++        <dependency>
++            <groupId>org.springframework.boot</groupId>
++            <artifactId>spring-boot-starter-actuator</artifactId>
++        </dependency>
++    </dependencies>
++
++    <build>
++        <plugins>
++            <plugin>
++                <groupId>org.springframework.boot</groupId>
++                <artifactId>spring-boot-maven-plugin</artifactId>
++                <version>${spring-boot.version}</version>
++                <executions>
++                    <execution>
++                        <goals>
++                            <goal>repackage</goal>
++                        </goals>
++                    </execution>
++                </executions>
++            </plugin>
++            <plugin>
++                <groupId>org.apache.maven.plugins</groupId>
++                <artifactId>maven-compiler-plugin</artifactId>
++                <configuration>
++                    <source>${java.version}</source>
++                    <target>${java.version}</target>
++                    <compilerArgs>
++                        <arg>-parameters</arg>
++                    </compilerArgs>
++                </configuration>
++            </plugin>
++        </plugins>
++    </build>
++</project>
+diff --git a/billing-api/src/main/java/com/condos/billing/BillingApiApplication.java b/billing-api/src/main/java/com/condos/billing/BillingApiApplication.java
+new file mode 100644
+index 0000000..49e3b84
+--- /dev/null
++++ b/billing-api/src/main/java/com/condos/billing/BillingApiApplication.java
+@@ -0,0 +1,20 @@
++package com.condos.billing;
++
++import org.springframework.boot.SpringApplication;
++import org.springframework.boot.autoconfigure.SpringBootApplication;
++import org.springframework.data.mongodb.repository.config.EnableMongoRepositories;
++import org.springframework.scheduling.annotation.EnableScheduling;
++
++@SpringBootApplication(scanBasePackages = {
++        "com.condos.billing",   // este servicio
++        "com.condos.shared"     // JwtService, GlobalExceptionHandler, CorsConfig...
++})
++@EnableMongoRepositories(basePackages = {
++        "com.condos.billing.repository"
++})
++@EnableScheduling // generación automática de cargos (RN-PAG-01)
++public class BillingApiApplication {
++    public static void main(String[] args) {
++        SpringApplication.run(BillingApiApplication.class, args);
++    }
++}
+diff --git a/billing-api/src/main/java/com/condos/billing/api/AccountStatementController.java b/billing-api/src/main/java/com/condos/billing/api/AccountStatementController.java
+new file mode 100644
+index 0000000..d1908f6
+--- /dev/null
++++ b/billing-api/src/main/java/com/condos/billing/api/AccountStatementController.java
+@@ -0,0 +1,31 @@
++package com.condos.billing.api;
++
++import com.condos.billing.api.dto.AccountStatementResponse;
++import com.condos.billing.service.AccountStatementService;
++import lombok.RequiredArgsConstructor;
++import org.springframework.security.access.prepost.PreAuthorize;
++import org.springframework.web.bind.annotation.GetMapping;
++import org.springframework.web.bind.annotation.RequestMapping;
++import org.springframework.web.bind.annotation.RequestParam;
++import org.springframework.web.bind.annotation.RestController;
++
++@RestController
++@RequestMapping("/condos/api/billing")
++@RequiredArgsConstructor
++public class AccountStatementController {
++
++    private final AccountStatementService statements;
++
++    // NOTA: no podemos validar aquí que unitId pertenezca a orgId (esa data
++    // vive en board-api), así que por ahora solo se valida que el usuario
++    // tenga rol en el orgId indicado. Ver limitación de auth servicio-a-servicio
++    // documentada en BoardApiClient.
++    @GetMapping("/account-statement")
++    @PreAuthorize("""
++        @jwtAuth.isSuperadmin(authentication) or
++        @jwtAuth.hasRoleInOrg(authentication, #orgId, {'ADMINISTRADOR','SUPERVISOR','OPERATIVO'})
++    """)
++    public AccountStatementResponse forUnit(@RequestParam String orgId, @RequestParam String unitId) {
++        return statements.forUnit(unitId);
++    }
++}
+diff --git a/billing-api/src/main/java/com/condos/billing/api/ChargeController.java b/billing-api/src/main/java/com/condos/billing/api/ChargeController.java
+new file mode 100644
+index 0000000..c4a9fd1
+--- /dev/null
++++ b/billing-api/src/main/java/com/condos/billing/api/ChargeController.java
+@@ -0,0 +1,85 @@
++package com.condos.billing.api;
++
++import com.condos.billing.api.dto.ChargeResponse;
++import com.condos.billing.api.dto.CreateExtraordinaryChargeRequest;
++import com.condos.billing.api.dto.GenerateChargesRequest;
++import com.condos.billing.model.ChargeStatus;
++import com.condos.billing.service.ChargeService;
++import jakarta.servlet.http.HttpServletRequest;
++import jakarta.validation.Valid;
++import lombok.RequiredArgsConstructor;
++import org.springframework.data.domain.Page;
++import org.springframework.data.domain.Sort;
++import org.springframework.http.HttpStatus;
++import org.springframework.security.access.prepost.PreAuthorize;
++import org.springframework.web.bind.annotation.*;
++import org.springframework.web.server.ResponseStatusException;
++
++import java.util.List;
++
++@RestController
++@RequestMapping("/condos/api/billing")
++@RequiredArgsConstructor
++public class ChargeController {
++
++    private final ChargeService charges;
++
++    @PostMapping("/charges/generate")
++    @PreAuthorize("""
++        @jwtAuth.isSuperadmin(authentication) or
++        @jwtAuth.hasRoleInOrg(authentication, #orgId, {'ADMINISTRADOR','SUPERVISOR'})
++    """)
++    public List<ChargeResponse> generate(@RequestParam String orgId,
++                                          @Valid @RequestBody GenerateChargesRequest req,
++                                          HttpServletRequest http) {
++        var created = charges.generateForPeriod(orgId, req.boardId(), req.period(), bearerToken(http));
++        return created.stream().map(ChargeResponse::from).toList();
++    }
++
++    @PostMapping("/charges/extraordinary")
++    @PreAuthorize("""
++        @jwtAuth.isSuperadmin(authentication) or
++        @jwtAuth.hasRoleInOrg(authentication, #orgId, {'ADMINISTRADOR','SUPERVISOR'})
++    """)
++    public List<ChargeResponse> extraordinary(@RequestParam String orgId,
++                                               @Valid @RequestBody CreateExtraordinaryChargeRequest req,
++                                               HttpServletRequest http) {
++        var created = charges.createExtraordinary(orgId, req, bearerToken(http));
++        return created.stream().map(ChargeResponse::from).toList();
++    }
++
++    @GetMapping("/charges")
++    @PreAuthorize("""
++        @jwtAuth.isSuperadmin(authentication) or
++        @jwtAuth.hasRoleInOrg(authentication, #orgId, {'ADMINISTRADOR','SUPERVISOR','OPERATIVO'})
++    """)
++    public Page<ChargeResponse> list(@RequestParam String orgId,
++                                      @RequestParam(required = false) String unitId,
++                                      @RequestParam(required = false) String boardId,
++                                      @RequestParam(required = false) ChargeStatus status,
++                                      @RequestParam(defaultValue = "0") int page,
++                                      @RequestParam(defaultValue = "50") int size,
++                                      @RequestParam(defaultValue = "dueDate") String sortBy,
++                                      @RequestParam(defaultValue = "DESC") Sort.Direction dir) {
++        if (unitId == null && boardId == null) {
++            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Debes indicar unitId o boardId");
++        }
++        var result = unitId != null
++                ? charges.listByUnit(unitId, status, page, size, sortBy, dir)
++                : charges.listByBoard(boardId, status, page, size, sortBy, dir);
++        return result.map(ChargeResponse::from);
++    }
++
++    @GetMapping("/charges/{id}")
++    @PreAuthorize("@jwtAuth.isSuperadmin(authentication) or @jwtAuth.hasAccessToCharge(authentication, #id, {'ADMINISTRADOR','SUPERVISOR','OPERATIVO'})")
++    public ChargeResponse get(@PathVariable String id) {
++        var c = charges.get(id).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
++        return ChargeResponse.from(c);
++    }
++
++    private String bearerToken(HttpServletRequest http) {
++        String h = http.getHeader("Authorization");
++        if (h != null && h.startsWith("Bearer ")) return h.substring(7);
++        throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "missing bearer token");
++    }
++}
+diff --git a/billing-api/src/main/java/com/condos/billing/api/FeeScheduleController.java b/billing-api/src/main/java/com/condos/billing/api/FeeScheduleController.java
+new file mode 100644
+index 0000000..07c9748
+--- /dev/null
++++ b/billing-api/src/main/java/com/condos/billing/api/FeeScheduleController.java
+@@ -0,0 +1,71 @@
++package com.condos.billing.api;
++
++import com.condos.billing.api.dto.CreateFeeScheduleRequest;
++import com.condos.billing.api.dto.FeeScheduleResponse;
++import com.condos.billing.api.dto.UpdateFeeScheduleRequest;
++import com.condos.billing.service.FeeScheduleService;
++import jakarta.validation.Valid;
++import lombok.RequiredArgsConstructor;
++import org.springframework.data.domain.Page;
++import org.springframework.data.domain.Sort;
++import org.springframework.http.HttpStatus;
++import org.springframework.security.access.prepost.PreAuthorize;
++import org.springframework.security.core.Authentication;
++import org.springframework.web.bind.annotation.*;
++import org.springframework.web.server.ResponseStatusException;
++
++@RestController
++@RequestMapping("/condos/api/billing")
++@RequiredArgsConstructor
++public class FeeScheduleController {
++
++    private final FeeScheduleService schedules;
++
++    // NOTA: billing-api no tiene acceso a la BD de board-api, así que no puede
++    // resolver boardId -> orgId por su cuenta (ver BoardApiClient). Por eso
++    // orgId se recibe explícito aquí en vez de derivarse del board, hasta que
++    // exista auth servicio-a-servicio real entre microservicios.
++    @PostMapping("/boards/{boardId}/schedules")
++    @ResponseStatus(HttpStatus.CREATED)
++    @PreAuthorize("""
++        @jwtAuth.isSuperadmin(authentication) or
++        @jwtAuth.hasRoleInOrg(authentication, #orgId, {'ADMINISTRADOR','SUPERVISOR'})
++    """)
++    public FeeScheduleResponse create(@PathVariable String boardId,
++                                       @RequestParam String orgId,
++                                       @Valid @RequestBody CreateFeeScheduleRequest req,
++                                       Authentication authentication) {
++        var s = schedules.create(orgId, boardId, req.name(), req.amount(), req.currency(),
++                req.frequency(), req.dueDayOfPeriod(), authentication.getName());
++        return FeeScheduleResponse.from(s);
++    }
++
++    @GetMapping("/boards/{boardId}/schedules")
++    @PreAuthorize("""
++        @jwtAuth.isSuperadmin(authentication) or
++        @jwtAuth.hasRoleInOrg(authentication, #orgId, {'ADMINISTRADOR','SUPERVISOR','OPERATIVO'})
++    """)
++    public Page<FeeScheduleResponse> list(@PathVariable String boardId,
++                                           @RequestParam String orgId,
++                                           @RequestParam(defaultValue = "0") int page,
++                                           @RequestParam(defaultValue = "50") int size,
++                                           @RequestParam(defaultValue = "createdAt") String sortBy,
++                                           @RequestParam(defaultValue = "DESC") Sort.Direction dir) {
++        return schedules.list(boardId, page, size, sortBy, dir).map(FeeScheduleResponse::from);
++    }
++
++    @GetMapping("/schedules/{id}")
++    @PreAuthorize("@jwtAuth.isSuperadmin(authentication) or @jwtAuth.hasAccessToSchedule(authentication, #id, {'ADMINISTRADOR','SUPERVISOR','OPERATIVO'})")
++    public FeeScheduleResponse get(@PathVariable String id) {
++        var s = schedules.get(id).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
++        return FeeScheduleResponse.from(s);
++    }
++
++    @PutMapping("/schedules/{id}")
++    @PreAuthorize("@jwtAuth.isSuperadmin(authentication) or @jwtAuth.hasAccessToSchedule(authentication, #id, {'ADMINISTRADOR','SUPERVISOR'})")
++    public FeeScheduleResponse update(@PathVariable String id, @RequestBody UpdateFeeScheduleRequest req) {
++        var s = schedules.update(id, req.name(), req.amount(), req.currency(), req.frequency(),
++                req.dueDayOfPeriod(), req.active());
++        return FeeScheduleResponse.from(s);
++    }
++}
+diff --git a/billing-api/src/main/java/com/condos/billing/api/PaymentController.java b/billing-api/src/main/java/com/condos/billing/api/PaymentController.java
+new file mode 100644
+index 0000000..889129c
+--- /dev/null
++++ b/billing-api/src/main/java/com/condos/billing/api/PaymentController.java
+@@ -0,0 +1,76 @@
++package com.condos.billing.api;
++
++import com.condos.billing.api.dto.CreatePaymentRequest;
++import com.condos.billing.api.dto.PaymentResponse;
++import com.condos.billing.api.dto.ReconcilePaymentRequest;
++import com.condos.billing.model.ReconciliationStatus;
++import com.condos.billing.service.PaymentService;
++import jakarta.validation.Valid;
++import lombok.RequiredArgsConstructor;
++import org.springframework.data.domain.Page;
++import org.springframework.data.domain.Sort;
++import org.springframework.http.HttpStatus;
++import org.springframework.security.access.prepost.PreAuthorize;
++import org.springframework.security.core.Authentication;
++import org.springframework.web.bind.annotation.*;
++import org.springframework.web.server.ResponseStatusException;
++
++@RestController
++@RequestMapping("/condos/api/billing")
++@RequiredArgsConstructor
++public class PaymentController {
++
++    private final PaymentService payments;
++
++    @PostMapping("/boards/{boardId}/payments")
++    @ResponseStatus(HttpStatus.CREATED)
++    @PreAuthorize("""
++        @jwtAuth.isSuperadmin(authentication) or
++        @jwtAuth.hasRoleInOrg(authentication, #orgId, {'ADMINISTRADOR','SUPERVISOR','OPERATIVO'})
++    """)
++    public PaymentResponse create(@PathVariable String boardId,
++                                   @RequestParam String orgId,
++                                   @Valid @RequestBody CreatePaymentRequest req) {
++        var p = payments.create(orgId, boardId, req.unitId(), req.chargeIds(), req.amount(),
++                req.method(), req.receiptFileId());
++        return PaymentResponse.from(p);
++    }
++
++    @GetMapping("/payments")
++    @PreAuthorize("""
++        @jwtAuth.isSuperadmin(authentication) or
++        @jwtAuth.hasRoleInOrg(authentication, #orgId, {'ADMINISTRADOR','SUPERVISOR','OPERATIVO'})
++    """)
++    public Page<PaymentResponse> list(@RequestParam String orgId,
++                                       @RequestParam(required = false) String unitId,
++                                       @RequestParam(required = false) String boardId,
++                                       @RequestParam(required = false) ReconciliationStatus reconciliationStatus,
++                                       @RequestParam(defaultValue = "0") int page,
++                                       @RequestParam(defaultValue = "50") int size,
++                                       @RequestParam(defaultValue = "createdAt") String sortBy,
++                                       @RequestParam(defaultValue = "DESC") Sort.Direction dir) {
++        if (unitId == null && boardId == null) {
++            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Debes indicar unitId o boardId");
++        }
++        var result = unitId != null
++                ? payments.listByUnit(unitId, reconciliationStatus, page, size, sortBy, dir)
++                : payments.listByBoard(boardId, reconciliationStatus, page, size, sortBy, dir);
++        return result.map(PaymentResponse::from);
++    }
++
++    @GetMapping("/payments/{id}")
++    @PreAuthorize("@jwtAuth.isSuperadmin(authentication) or @jwtAuth.hasAccessToPayment(authentication, #id, {'ADMINISTRADOR','SUPERVISOR','OPERATIVO'})")
++    public PaymentResponse get(@PathVariable String id) {
++        var p = payments.get(id).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
++        return PaymentResponse.from(p);
++    }
++
++    @PostMapping("/payments/{id}/reconcile")
++    @PreAuthorize("@jwtAuth.isSuperadmin(authentication) or @jwtAuth.hasAccessToPayment(authentication, #id, {'ADMINISTRADOR','SUPERVISOR'})")
++    public PaymentResponse reconcile(@PathVariable String id,
++                                      @Valid @RequestBody ReconcilePaymentRequest req,
++                                      Authentication authentication) {
++        var p = payments.reconcile(id, req.approve(), authentication.getName());
++        return PaymentResponse.from(p);
++    }
++}
+diff --git a/billing-api/src/main/java/com/condos/billing/api/dto/AccountStatementResponse.java b/billing-api/src/main/java/com/condos/billing/api/dto/AccountStatementResponse.java
+new file mode 100644
+index 0000000..f63af23
+--- /dev/null
++++ b/billing-api/src/main/java/com/condos/billing/api/dto/AccountStatementResponse.java
+@@ -0,0 +1,15 @@
++package com.condos.billing.api.dto;
++
++import java.math.BigDecimal;
++import java.util.List;
++
++/** Estado de cuenta de una unidad (RN-PAG-05): cargos y pagos, con saldo actual. */
++public record AccountStatementResponse(
++        String unitId,
++        String boardId,
++        BigDecimal totalCharged,
++        BigDecimal totalPaid,
++        BigDecimal balance, // totalCharged - totalPaid
++        List<ChargeResponse> charges,
++        List<PaymentResponse> payments
++) {}
+diff --git a/billing-api/src/main/java/com/condos/billing/api/dto/ChargeResponse.java b/billing-api/src/main/java/com/condos/billing/api/dto/ChargeResponse.java
+new file mode 100644
+index 0000000..0402535
+--- /dev/null
++++ b/billing-api/src/main/java/com/condos/billing/api/dto/ChargeResponse.java
+@@ -0,0 +1,34 @@
++package com.condos.billing.api.dto;
++
++import com.condos.billing.model.Charge;
++import com.condos.billing.model.ChargeStatus;
++import com.condos.billing.model.ChargeType;
++
++import java.math.BigDecimal;
++import java.time.Instant;
++
++public record ChargeResponse(
++        String id,
++        String boardId,
++        String orgId,
++        String unitId,
++        String feeScheduleId,
++        ChargeType type,
++        String concept,
++        BigDecimal amount,
++        String period,
++        Instant dueDate,
++        ChargeStatus status,
++        String assemblyActaNumber,
++        Instant createdAt,
++        Instant updatedAt
++) {
++    public static ChargeResponse from(Charge c) {
++        return new ChargeResponse(
++                c.getId(), c.getBoardId(), c.getOrgId(), c.getUnitId(), c.getFeeScheduleId(),
++                c.getType(), c.getConcept(), c.getAmount(), c.getPeriod(), c.getDueDate(), c.getStatus(),
++                c.getAssemblyRef() != null ? c.getAssemblyRef().getActaNumber() : null,
++                c.getCreatedAt(), c.getUpdatedAt()
++        );
++    }
++}
+diff --git a/billing-api/src/main/java/com/condos/billing/api/dto/CreateExtraordinaryChargeRequest.java b/billing-api/src/main/java/com/condos/billing/api/dto/CreateExtraordinaryChargeRequest.java
+new file mode 100644
+index 0000000..394eed8
+--- /dev/null
++++ b/billing-api/src/main/java/com/condos/billing/api/dto/CreateExtraordinaryChargeRequest.java
+@@ -0,0 +1,24 @@
++package com.condos.billing.api.dto;
++
++import jakarta.validation.constraints.DecimalMin;
++import jakarta.validation.constraints.NotBlank;
++import jakarta.validation.constraints.NotNull;
++
++import java.math.BigDecimal;
++import java.time.Instant;
++import java.util.List;
++
++/**
++ * Crea una cuota extraordinaria (RN-PAG-02). Si unitIds viene vacío/null,
++ * se aplica a todas las unidades activas de la colonia.
++ */
++public record CreateExtraordinaryChargeRequest(
++        @NotBlank String boardId,
++        List<String> unitIds,
++        @NotBlank String concept,
++        @NotNull @DecimalMin(value = "0.01") BigDecimal amount,
++        Instant dueDate,
++        String actaNumber,
++        Instant actaDate,
++        String attachmentFileId
++) {}
+diff --git a/billing-api/src/main/java/com/condos/billing/api/dto/CreateFeeScheduleRequest.java b/billing-api/src/main/java/com/condos/billing/api/dto/CreateFeeScheduleRequest.java
+new file mode 100644
+index 0000000..8006f09
+--- /dev/null
++++ b/billing-api/src/main/java/com/condos/billing/api/dto/CreateFeeScheduleRequest.java
+@@ -0,0 +1,18 @@
++package com.condos.billing.api.dto;
++
++import com.condos.billing.model.FeeFrequency;
++import jakarta.validation.constraints.DecimalMin;
++import jakarta.validation.constraints.Max;
++import jakarta.validation.constraints.Min;
++import jakarta.validation.constraints.NotBlank;
++import jakarta.validation.constraints.NotNull;
++
++import java.math.BigDecimal;
++
++public record CreateFeeScheduleRequest(
++        @NotBlank String name,
++        @NotNull @DecimalMin(value = "0.01") BigDecimal amount,
++        String currency, // default "MXN" si viene vacío
++        @NotNull FeeFrequency frequency,
++        @Min(1) @Max(28) Integer dueDayOfPeriod
++) {}
+diff --git a/billing-api/src/main/java/com/condos/billing/api/dto/CreatePaymentRequest.java b/billing-api/src/main/java/com/condos/billing/api/dto/CreatePaymentRequest.java
+new file mode 100644
+index 0000000..42d72af
+--- /dev/null
++++ b/billing-api/src/main/java/com/condos/billing/api/dto/CreatePaymentRequest.java
+@@ -0,0 +1,18 @@
++package com.condos.billing.api.dto;
++
++import com.condos.billing.model.PaymentMethod;
++import jakarta.validation.constraints.DecimalMin;
++import jakarta.validation.constraints.NotBlank;
++import jakarta.validation.constraints.NotEmpty;
++import jakarta.validation.constraints.NotNull;
++
++import java.math.BigDecimal;
++import java.util.List;
++
++public record CreatePaymentRequest(
++        @NotBlank String unitId,
++        @NotEmpty List<String> chargeIds,
++        @NotNull @DecimalMin(value = "0.01") BigDecimal amount,
++        @NotNull PaymentMethod method,
++        String receiptFileId
++) {}
+diff --git a/billing-api/src/main/java/com/condos/billing/api/dto/FeeScheduleResponse.java b/billing-api/src/main/java/com/condos/billing/api/dto/FeeScheduleResponse.java
+new file mode 100644
+index 0000000..776e44c
+--- /dev/null
++++ b/billing-api/src/main/java/com/condos/billing/api/dto/FeeScheduleResponse.java
+@@ -0,0 +1,30 @@
++package com.condos.billing.api.dto;
++
++import com.condos.billing.model.FeeFrequency;
++import com.condos.billing.model.FeeSchedule;
++
++import java.math.BigDecimal;
++import java.time.Instant;
++
++public record FeeScheduleResponse(
++        String id,
++        String boardId,
++        String orgId,
++        String name,
++        BigDecimal amount,
++        String currency,
++        FeeFrequency frequency,
++        int dueDayOfPeriod,
++        boolean active,
++        Instant createdAt,
++        Instant updatedAt,
++        String createdBy
++) {
++    public static FeeScheduleResponse from(FeeSchedule s) {
++        return new FeeScheduleResponse(
++                s.getId(), s.getBoardId(), s.getOrgId(), s.getName(), s.getAmount(), s.getCurrency(),
++                s.getFrequency(), s.getDueDayOfPeriod(), s.isActive(), s.getCreatedAt(), s.getUpdatedAt(),
++                s.getCreatedBy()
++        );
++    }
++}
+diff --git a/billing-api/src/main/java/com/condos/billing/api/dto/GenerateChargesRequest.java b/billing-api/src/main/java/com/condos/billing/api/dto/GenerateChargesRequest.java
+new file mode 100644
+index 0000000..f022382
+--- /dev/null
++++ b/billing-api/src/main/java/com/condos/billing/api/dto/GenerateChargesRequest.java
+@@ -0,0 +1,10 @@
++package com.condos.billing.api.dto;
++
++import jakarta.validation.constraints.NotBlank;
++import jakarta.validation.constraints.Pattern;
++
++/** Genera los cargos regulares del periodo indicado para todas las unidades activas de la colonia. */
++public record GenerateChargesRequest(
++        @NotBlank String boardId,
++        @NotBlank @Pattern(regexp = "\\d{4}-\\d{2}") String period // "2026-08"
++) {}
+diff --git a/billing-api/src/main/java/com/condos/billing/api/dto/PaymentResponse.java b/billing-api/src/main/java/com/condos/billing/api/dto/PaymentResponse.java
+new file mode 100644
+index 0000000..f232a2b
+--- /dev/null
++++ b/billing-api/src/main/java/com/condos/billing/api/dto/PaymentResponse.java
+@@ -0,0 +1,34 @@
++package com.condos.billing.api.dto;
++
++import com.condos.billing.model.Payment;
++import com.condos.billing.model.PaymentMethod;
++import com.condos.billing.model.ReconciliationStatus;
++
++import java.math.BigDecimal;
++import java.time.Instant;
++import java.util.List;
++
++public record PaymentResponse(
++        String id,
++        String boardId,
++        String orgId,
++        String unitId,
++        List<String> chargeIds,
++        BigDecimal amount,
++        PaymentMethod method,
++        String receiptFileId,
++        ReconciliationStatus reconciliationStatus,
++        String reconciledBy,
++        Instant reconciledAt,
++        Instant reportedAt,
++        Instant createdAt,
++        Instant updatedAt
++) {
++    public static PaymentResponse from(Payment p) {
++        return new PaymentResponse(
++                p.getId(), p.getBoardId(), p.getOrgId(), p.getUnitId(), p.getChargeIds(), p.getAmount(),
++                p.getMethod(), p.getReceiptFileId(), p.getReconciliationStatus(), p.getReconciledBy(),
++                p.getReconciledAt(), p.getReportedAt(), p.getCreatedAt(), p.getUpdatedAt()
++        );
++    }
++}
+diff --git a/billing-api/src/main/java/com/condos/billing/api/dto/ReconcilePaymentRequest.java b/billing-api/src/main/java/com/condos/billing/api/dto/ReconcilePaymentRequest.java
+new file mode 100644
+index 0000000..b707368
+--- /dev/null
++++ b/billing-api/src/main/java/com/condos/billing/api/dto/ReconcilePaymentRequest.java
+@@ -0,0 +1,7 @@
++package com.condos.billing.api.dto;
++
++import jakarta.validation.constraints.NotNull;
++
++public record ReconcilePaymentRequest(
++        @NotNull Boolean approve // true = RECONCILED, false = REJECTED
++) {}
+diff --git a/billing-api/src/main/java/com/condos/billing/api/dto/UpdateFeeScheduleRequest.java b/billing-api/src/main/java/com/condos/billing/api/dto/UpdateFeeScheduleRequest.java
+new file mode 100644
+index 0000000..4f35b73
+--- /dev/null
++++ b/billing-api/src/main/java/com/condos/billing/api/dto/UpdateFeeScheduleRequest.java
+@@ -0,0 +1,14 @@
++package com.condos.billing.api.dto;
++
++import com.condos.billing.model.FeeFrequency;
++
++import java.math.BigDecimal;
++
++public record UpdateFeeScheduleRequest(
++        String name,
++        BigDecimal amount,
++        String currency,
++        FeeFrequency frequency,
++        Integer dueDayOfPeriod,
++        Boolean active
++) {}
+diff --git a/billing-api/src/main/java/com/condos/billing/config/JwtAuthFilter.java b/billing-api/src/main/java/com/condos/billing/config/JwtAuthFilter.java
+new file mode 100644
+index 0000000..bb863ca
+--- /dev/null
++++ b/billing-api/src/main/java/com/condos/billing/config/JwtAuthFilter.java
+@@ -0,0 +1,88 @@
++package com.condos.billing.config;
++
++import com.condos.shared.security.JwtService;
++import io.jsonwebtoken.JwtException;
++import jakarta.servlet.FilterChain;
++import jakarta.servlet.ServletException;
++import jakarta.servlet.http.HttpServletRequest;
++import jakarta.servlet.http.HttpServletResponse;
++import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
++import org.springframework.security.core.GrantedAuthority;
++import org.springframework.security.core.authority.SimpleGrantedAuthority;
++import org.springframework.security.core.context.SecurityContextHolder;
++import org.springframework.stereotype.Component;
++import org.springframework.web.filter.OncePerRequestFilter;
++
++import java.io.IOException;
++import java.util.ArrayList;
++import java.util.HashMap;
++import java.util.List;
++import java.util.Map;
++
++/**
++ * IMPORTANTE: auth-api emite JWTs en formato NUEVO (multi-org):
++ * claims { email, orgs: [{orgId, role}], ver }.
++ * Este filtro debe leer ese claim "orgs" y ponerlo en auth.getDetails() como
++ * un Map con clave "orgs" (lista de {orgId, role}), que es justo lo que
++ * JwtAuth.claims(...) espera para resolver hasRoleInOrg/hasAccessToBoard/
++ * hasAccessToTask/hasAccessToUnit/isSuperadmin.
++ *
++ * Antes este filtro leía el formato LEGADO (orgId/roles sueltos, ya no
++ * emitido por auth-api), por lo que esos métodos de JwtAuth siempre
++ * devolvían false y cualquier @PreAuthorize que dependiera de ellos fallaba
++ * en silencio (403), incluyendo boards, tasks y units.
++ */
++@Component
++public class JwtAuthFilter extends OncePerRequestFilter {
++
++    private final JwtService jwt;
++
++    public JwtAuthFilter(JwtService jwt) {
++        this.jwt = jwt;
++    }
++
++    @Override
++    protected void doFilterInternal(HttpServletRequest req, HttpServletResponse res, FilterChain chain)
++            throws ServletException, IOException {
++
++        var header = req.getHeader("Authorization");
++        if (header != null && header.startsWith("Bearer ")) {
++            try {
++                var jws = jwt.parse(header.substring(7));
++                var userId = jws.getBody().getSubject();
++
++                List<JwtService.OrgRole> orgRoles = jwt.extractOrgRoles(jws);
++
++                List<Map<String, Object>> orgsForDetails = new ArrayList<>();
++                List<String> rolesRoot = new ArrayList<>();
++                List<GrantedAuthority> auths = new ArrayList<>();
++                auths.add(new SimpleGrantedAuthority("ROLE_USER"));
++
++                for (var o : orgRoles) {
++                    Map<String, Object> m = new HashMap<>();
++                    m.put("orgId", o.orgId());
++                    m.put("role", o.role());
++                    orgsForDetails.add(m);
++                    rolesRoot.add(o.role());
++
++                    auths.add(new SimpleGrantedAuthority(
++                            "SUPERADMIN".equals(o.role()) ? o.role() : o.role() + "@" + o.orgId()));
++                    if ("SUPERADMIN".equals(o.role())) {
++                        auths.add(new SimpleGrantedAuthority("ROLE_SUPERADMIN"));
++                    }
++                }
++
++                var auth = new UsernamePasswordAuthenticationToken(userId, null, auths);
++                Map<String, Object> details = new HashMap<>();
++                details.put("orgs", orgsForDetails);
++                details.put("roles", rolesRoot);
++                auth.setDetails(details);
++                SecurityContextHolder.getContext().setAuthentication(auth);
++            } catch (JwtException ignored) {
++                // token inválido: lo ignoramos y dejamos que el chain siga (caerá en 401 si el endpoint requiere auth)
++            }
++        }
++
++        chain.doFilter(req, res);
++    }
++}
+diff --git a/billing-api/src/main/java/com/condos/billing/config/SecurityConfig.java b/billing-api/src/main/java/com/condos/billing/config/SecurityConfig.java
+new file mode 100644
+index 0000000..8797625
+--- /dev/null
++++ b/billing-api/src/main/java/com/condos/billing/config/SecurityConfig.java
+@@ -0,0 +1,50 @@
++package com.condos.billing.config;
++
++import org.springframework.context.annotation.Bean;
++import org.springframework.context.annotation.Configuration;
++import org.springframework.http.HttpMethod;
++import org.springframework.http.HttpStatus;
++import org.springframework.security.authentication.AuthenticationManager;
++import org.springframework.security.config.Customizer;
++import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
++import org.springframework.security.config.annotation.web.builders.HttpSecurity;
++import org.springframework.security.config.http.SessionCreationPolicy;
++import org.springframework.security.web.SecurityFilterChain;
++import org.springframework.security.web.authentication.AnonymousAuthenticationFilter;
++import org.springframework.security.web.authentication.HttpStatusEntryPoint;
++
++@Configuration
++public class SecurityConfig {
++
++    private final JwtAuthFilter jwtAuthFilter;
++
++    public SecurityConfig(JwtAuthFilter jwtAuthFilter) {
++        this.jwtAuthFilter = jwtAuthFilter;
++    }
++
++    @Bean
++    public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
++        http
++                .csrf(csrf -> csrf.disable())
++                .cors(Customizer.withDefaults())
++                .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
++                .requestCache(rc -> rc.disable())
++                .securityContext(sc -> sc.requireExplicitSave(false))
++                .exceptionHandling(eh -> eh.authenticationEntryPoint(new HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED)))
++
++                .authorizeHttpRequests(auth -> auth
++                        .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
++                        .requestMatchers("/health", "/actuator/health", "/actuator/**").permitAll()
++                        .anyRequest().authenticated()
++                )
++
++                .addFilterBefore(jwtAuthFilter, AnonymousAuthenticationFilter.class);
++
++        return http.build();
++    }
++
++    @Bean
++    public AuthenticationManager authenticationManager(AuthenticationConfiguration cfg) throws Exception {
++        return cfg.getAuthenticationManager();
++    }
++}
+diff --git a/billing-api/src/main/java/com/condos/billing/model/AssemblyRef.java b/billing-api/src/main/java/com/condos/billing/model/AssemblyRef.java
+new file mode 100644
+index 0000000..9482404
+--- /dev/null
++++ b/billing-api/src/main/java/com/condos/billing/model/AssemblyRef.java
+@@ -0,0 +1,18 @@
++package com.condos.billing.model;
++
++import lombok.AllArgsConstructor;
++import lombok.Builder;
++import lombok.Getter;
++import lombok.NoArgsConstructor;
++import lombok.Setter;
++
++import java.time.Instant;
++
++/** Respaldo documental de asamblea para cuotas extraordinarias (RN-PAG-02, RN-GEN-04). */
++@Getter @Setter
++@NoArgsConstructor @AllArgsConstructor @Builder
++public class AssemblyRef {
++    private String actaNumber;
++    private Instant actaDate;
++    private String attachmentFileId; // referencia a un archivo subido vía board-api/files
++}
+diff --git a/billing-api/src/main/java/com/condos/billing/model/Charge.java b/billing-api/src/main/java/com/condos/billing/model/Charge.java
+new file mode 100644
+index 0000000..f3e0432
+--- /dev/null
++++ b/billing-api/src/main/java/com/condos/billing/model/Charge.java
+@@ -0,0 +1,68 @@
++package com.condos.billing.model;
++
++import lombok.*;
++import org.springframework.data.annotation.Id;
++import org.springframework.data.mongodb.core.index.CompoundIndex;
++import org.springframework.data.mongodb.core.index.CompoundIndexes;
++import org.springframework.data.mongodb.core.index.Indexed;
++import org.springframework.data.mongodb.core.mapping.Document;
++
++import java.math.BigDecimal;
++import java.time.Instant;
++
++/** Un cargo (cuota regular o extraordinaria) generado para una unidad específica. */
++@Getter @Setter
++@NoArgsConstructor @AllArgsConstructor @Builder
++@Document("charges")
++@CompoundIndexes({
++        // evita generar dos veces el mismo cargo regular para la misma unidad y periodo
++        @CompoundIndex(name = "uq_unit_schedule_period", def = "{ 'unitId': 1, 'feeScheduleId': 1, 'period': 1 }",
++                unique = true, sparse = true)
++})
++public class Charge {
++    @Id
++    private String id;
++
++    @Indexed
++    private String boardId;
++
++    @Indexed
++    private String orgId;
++
++    @Indexed
++    private String unitId;
++
++    private String feeScheduleId; // null si es extraordinaria
++    private ChargeType type;
++    private String concept;
++    private BigDecimal amount;
++    private String period;        // "2026-08" para regulares; null en extraordinarias sin periodo fijo
++    private Instant dueDate;
++    private ChargeStatus status;
++
++    private AssemblyRef assemblyRef; // solo para EXTRAORDINARY
++
++    private Instant createdAt;
++    private Instant updatedAt;
++
++    public static Charge newCharge(String orgId, String boardId, String unitId, String feeScheduleId,
++                                    ChargeType type, String concept, BigDecimal amount, String period,
++                                    Instant dueDate, AssemblyRef assemblyRef) {
++        Instant now = Instant.now();
++        return Charge.builder()
++                .orgId(orgId)
++                .boardId(boardId)
++                .unitId(unitId)
++                .feeScheduleId(feeScheduleId)
++                .type(type)
++                .concept(concept)
++                .amount(amount)
++                .period(period)
++                .dueDate(dueDate)
++                .status(ChargeStatus.PENDING)
++                .assemblyRef(assemblyRef)
++                .createdAt(now)
++                .updatedAt(now)
++                .build();
++    }
++}
+diff --git a/billing-api/src/main/java/com/condos/billing/model/ChargeStatus.java b/billing-api/src/main/java/com/condos/billing/model/ChargeStatus.java
+new file mode 100644
+index 0000000..7668d0d
+--- /dev/null
++++ b/billing-api/src/main/java/com/condos/billing/model/ChargeStatus.java
+@@ -0,0 +1,5 @@
++package com.condos.billing.model;
++
++public enum ChargeStatus {
++    PENDING, PARTIALLY_PAID, PAID, OVERDUE, CANCELLED
++}
+diff --git a/billing-api/src/main/java/com/condos/billing/model/ChargeType.java b/billing-api/src/main/java/com/condos/billing/model/ChargeType.java
+new file mode 100644
+index 0000000..8571e66
+--- /dev/null
++++ b/billing-api/src/main/java/com/condos/billing/model/ChargeType.java
+@@ -0,0 +1,5 @@
++package com.condos.billing.model;
++
++public enum ChargeType {
++    REGULAR, EXTRAORDINARY
++}
+diff --git a/billing-api/src/main/java/com/condos/billing/model/FeeFrequency.java b/billing-api/src/main/java/com/condos/billing/model/FeeFrequency.java
+new file mode 100644
+index 0000000..e4db97f
+--- /dev/null
++++ b/billing-api/src/main/java/com/condos/billing/model/FeeFrequency.java
+@@ -0,0 +1,5 @@
++package com.condos.billing.model;
++
++public enum FeeFrequency {
++    MONTHLY, BIMONTHLY, QUARTERLY, ANNUAL
++}
+diff --git a/billing-api/src/main/java/com/condos/billing/model/FeeSchedule.java b/billing-api/src/main/java/com/condos/billing/model/FeeSchedule.java
+new file mode 100644
+index 0000000..c01e775
+--- /dev/null
++++ b/billing-api/src/main/java/com/condos/billing/model/FeeSchedule.java
+@@ -0,0 +1,59 @@
++package com.condos.billing.model;
++
++import lombok.*;
++import org.springframework.data.annotation.Id;
++import org.springframework.data.mongodb.core.index.Indexed;
++import org.springframework.data.mongodb.core.mapping.Document;
++
++import java.math.BigDecimal;
++import java.time.Instant;
++
++/**
++ * Configuración de una cuota recurrente para una colonia (Board). Se define
++ * una vez y, al generar cargos (ChargeService), se crea un Charge por cada
++ * Unit activa de ese boardId con este mismo monto.
++ */
++@Getter @Setter
++@NoArgsConstructor @AllArgsConstructor @Builder
++@Document("fee_schedules")
++public class FeeSchedule {
++    @Id
++    private String id;
++
++    @Indexed
++    private String boardId;
++
++    @Indexed
++    private String orgId;
++
++    private String name;            // "Cuota de mantenimiento mensual"
++    private BigDecimal amount;      // monto por unidad
++    private String currency;        // "MXN"
++    private FeeFrequency frequency;
++    private int dueDayOfPeriod;     // día del mes en que vence, ej. 5
++
++    private boolean active;
++
++    private Instant createdAt;
++    private Instant updatedAt;
++    private String createdBy;
++
++    public static FeeSchedule newSchedule(String orgId, String boardId, String name, BigDecimal amount,
++                                           String currency, FeeFrequency frequency, int dueDayOfPeriod,
++                                           String createdBy) {
++        Instant now = Instant.now();
++        return FeeSchedule.builder()
++                .orgId(orgId)
++                .boardId(boardId)
++                .name(name)
++                .amount(amount)
++                .currency(currency)
++                .frequency(frequency)
++                .dueDayOfPeriod(dueDayOfPeriod)
++                .active(true)
++                .createdAt(now)
++                .updatedAt(now)
++                .createdBy(createdBy)
++                .build();
++    }
++}
+diff --git a/billing-api/src/main/java/com/condos/billing/model/Payment.java b/billing-api/src/main/java/com/condos/billing/model/Payment.java
+new file mode 100644
+index 0000000..d8f43c5
+--- /dev/null
++++ b/billing-api/src/main/java/com/condos/billing/model/Payment.java
+@@ -0,0 +1,59 @@
++package com.condos.billing.model;
++
++import lombok.*;
++import org.springframework.data.annotation.Id;
++import org.springframework.data.mongodb.core.index.Indexed;
++import org.springframework.data.mongodb.core.mapping.Document;
++
++import java.math.BigDecimal;
++import java.time.Instant;
++import java.util.List;
++
++/** Un pago registrado por una unidad, que puede cubrir uno o más cargos. */
++@Getter @Setter
++@NoArgsConstructor @AllArgsConstructor @Builder
++@Document("payments")
++public class Payment {
++    @Id
++    private String id;
++
++    @Indexed
++    private String boardId;
++
++    @Indexed
++    private String orgId;
++
++    @Indexed
++    private String unitId;
++
++    private List<String> chargeIds;
++    private BigDecimal amount;
++    private PaymentMethod method;
++    private String receiptFileId; // referencia a archivo subido vía board-api/files, opcional
++
++    private ReconciliationStatus reconciliationStatus;
++    private String reconciledBy;
++    private Instant reconciledAt;
++
++    private Instant reportedAt;
++    private Instant createdAt;
++    private Instant updatedAt;
++
++    public static Payment newPayment(String orgId, String boardId, String unitId, List<String> chargeIds,
++                                      BigDecimal amount, PaymentMethod method, String receiptFileId) {
++        Instant now = Instant.now();
++        return Payment.builder()
++                .orgId(orgId)
++                .boardId(boardId)
++                .unitId(unitId)
++                .chargeIds(chargeIds)
++                .amount(amount)
++                .method(method)
++                .receiptFileId(receiptFileId)
++                .reconciliationStatus(ReconciliationStatus.PENDING)
++                .reportedAt(now)
++                .createdAt(now)
++                .updatedAt(now)
++                .build();
++    }
++}
+diff --git a/billing-api/src/main/java/com/condos/billing/model/PaymentMethod.java b/billing-api/src/main/java/com/condos/billing/model/PaymentMethod.java
+new file mode 100644
+index 0000000..95bef46
+--- /dev/null
++++ b/billing-api/src/main/java/com/condos/billing/model/PaymentMethod.java
+@@ -0,0 +1,5 @@
++package com.condos.billing.model;
++
++public enum PaymentMethod {
++    TRANSFER, CARD, CASH, OTHER
++}
+diff --git a/billing-api/src/main/java/com/condos/billing/model/ReconciliationStatus.java b/billing-api/src/main/java/com/condos/billing/model/ReconciliationStatus.java
+new file mode 100644
+index 0000000..f4516b8
+--- /dev/null
++++ b/billing-api/src/main/java/com/condos/billing/model/ReconciliationStatus.java
+@@ -0,0 +1,5 @@
++package com.condos.billing.model;
++
++public enum ReconciliationStatus {
++    PENDING, RECONCILED, REJECTED
++}
+diff --git a/billing-api/src/main/java/com/condos/billing/repository/ChargeRepository.java b/billing-api/src/main/java/com/condos/billing/repository/ChargeRepository.java
+new file mode 100644
+index 0000000..936b4ef
+--- /dev/null
++++ b/billing-api/src/main/java/com/condos/billing/repository/ChargeRepository.java
+@@ -0,0 +1,19 @@
++package com.condos.billing.repository;
++
++import com.condos.billing.model.Charge;
++import com.condos.billing.model.ChargeStatus;
++import org.springframework.data.domain.Page;
++import org.springframework.data.domain.Pageable;
++import org.springframework.data.mongodb.repository.MongoRepository;
++
++import java.util.Optional;
++
++public interface ChargeRepository extends MongoRepository<Charge, String> {
++    Page<Charge> findByUnitId(String unitId, Pageable pageable);
++    Page<Charge> findByUnitIdAndStatus(String unitId, ChargeStatus status, Pageable pageable);
++
++    Page<Charge> findByBoardId(String boardId, Pageable pageable);
++    Page<Charge> findByBoardIdAndStatus(String boardId, ChargeStatus status, Pageable pageable);
++
++    Optional<Charge> findByUnitIdAndFeeScheduleIdAndPeriod(String unitId, String feeScheduleId, String period);
++}
+diff --git a/billing-api/src/main/java/com/condos/billing/repository/FeeScheduleRepository.java b/billing-api/src/main/java/com/condos/billing/repository/FeeScheduleRepository.java
+new file mode 100644
+index 0000000..878e6c1
+--- /dev/null
++++ b/billing-api/src/main/java/com/condos/billing/repository/FeeScheduleRepository.java
+@@ -0,0 +1,13 @@
++package com.condos.billing.repository;
++
++import com.condos.billing.model.FeeSchedule;
++import org.springframework.data.domain.Page;
++import org.springframework.data.domain.Pageable;
++import org.springframework.data.mongodb.repository.MongoRepository;
++
++import java.util.List;
++
++public interface FeeScheduleRepository extends MongoRepository<FeeSchedule, String> {
++    Page<FeeSchedule> findByBoardId(String boardId, Pageable pageable);
++    List<FeeSchedule> findByBoardIdAndActiveTrue(String boardId);
++}
+diff --git a/billing-api/src/main/java/com/condos/billing/repository/PaymentRepository.java b/billing-api/src/main/java/com/condos/billing/repository/PaymentRepository.java
+new file mode 100644
+index 0000000..09958ad
+--- /dev/null
++++ b/billing-api/src/main/java/com/condos/billing/repository/PaymentRepository.java
+@@ -0,0 +1,15 @@
++package com.condos.billing.repository;
++
++import com.condos.billing.model.Payment;
++import com.condos.billing.model.ReconciliationStatus;
++import org.springframework.data.domain.Page;
++import org.springframework.data.domain.Pageable;
++import org.springframework.data.mongodb.repository.MongoRepository;
++
++public interface PaymentRepository extends MongoRepository<Payment, String> {
++    Page<Payment> findByUnitId(String unitId, Pageable pageable);
++    Page<Payment> findByUnitIdAndReconciliationStatus(String unitId, ReconciliationStatus status, Pageable pageable);
++
++    Page<Payment> findByBoardId(String boardId, Pageable pageable);
++    Page<Payment> findByBoardIdAndReconciliationStatus(String boardId, ReconciliationStatus status, Pageable pageable);
++}
+diff --git a/billing-api/src/main/java/com/condos/billing/security/JwtAuth.java b/billing-api/src/main/java/com/condos/billing/security/JwtAuth.java
+new file mode 100644
+index 0000000..818095b
+--- /dev/null
++++ b/billing-api/src/main/java/com/condos/billing/security/JwtAuth.java
+@@ -0,0 +1,101 @@
++package com.condos.billing.security;
++
++import com.condos.billing.repository.ChargeRepository;
++import com.condos.billing.repository.FeeScheduleRepository;
++import com.condos.billing.repository.PaymentRepository;
++import org.springframework.security.core.Authentication;
++import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
++import org.springframework.stereotype.Component;
++
++import java.util.*;
++
++@Component("jwtAuth")
++public class JwtAuth {
++
++    private final FeeScheduleRepository schedules;
++    private final ChargeRepository charges;
++    private final PaymentRepository payments;
++
++    public JwtAuth(FeeScheduleRepository schedules, ChargeRepository charges, PaymentRepository payments) {
++        this.schedules = schedules;
++        this.charges = charges;
++        this.payments = payments;
++    }
++
++    @SuppressWarnings("unchecked")
++    private Map<String, Object> claims(Authentication auth) {
++        if (auth instanceof JwtAuthenticationToken jat) {
++            return jat.getTokenAttributes();
++        }
++        Object details = auth != null ? auth.getDetails() : null;
++        if (details instanceof Map<?, ?> map) {
++            Map<String, Object> out = new HashMap<>();
++            map.forEach((k, v) -> out.put(String.valueOf(k), v));
++            return out;
++        }
++        return Collections.emptyMap();
++    }
++
++    public boolean isSuperadmin(Authentication auth) {
++        if (auth == null || !auth.isAuthenticated()) return false;
++        var c = claims(auth);
++
++        Object roles = c.get("roles");
++        if (roles instanceof Collection<?> col) {
++            for (Object r : col) {
++                if ("SUPERADMIN".equals(String.valueOf(r))) return true;
++            }
++        }
++        Object orgs = c.get("orgs");
++        if (orgs instanceof Collection<?> col) {
++            for (Object o : col) {
++                if (o instanceof Map<?, ?> m && "SUPERADMIN".equals(String.valueOf(m.get("role")))) {
++                    return true;
++                }
++            }
++        }
++        return false;
++    }
++
++    public boolean hasRoleInOrg(Authentication auth, String orgId, Collection<String> rolesReq) {
++        if (auth == null || !auth.isAuthenticated()) return false;
++        var c = claims(auth);
++        Object orgs = c.get("orgs");
++        if (!(orgs instanceof Collection<?> col)) return false;
++
++        for (Object o : col) {
++            if (o instanceof Map<?, ?> m) {
++                String oid = String.valueOf(m.get("orgId"));
++                String role = String.valueOf(m.get("role"));
++                if (Objects.equals(orgId, oid) && rolesReq.contains(role)) {
++                    return true;
++                }
++            }
++        }
++        return false;
++    }
++
++    /** ¿Tiene alguno de los roles requeridos en el org dueño de esta configuración de cuota? */
++    public boolean hasAccessToSchedule(Authentication auth, String scheduleId, Collection<String> rolesReq) {
++        if (scheduleId == null) return false;
++        var s = schedules.findById(scheduleId).orElse(null);
++        if (s == null) return false;
++        return hasRoleInOrg(auth, s.getOrgId(), rolesReq);
++    }
++
++    /** ¿Tiene alguno de los roles requeridos en el org dueño de este cargo? */
++    public boolean hasAccessToCharge(Authentication auth, String chargeId, Collection<String> rolesReq) {
++        if (chargeId == null) return false;
++        var c = charges.findById(chargeId).orElse(null);
++        if (c == null) return false;
++        return hasRoleInOrg(auth, c.getOrgId(), rolesReq);
++    }
++
++    /** ¿Tiene alguno de los roles requeridos en el org dueño de este pago? */
++    public boolean hasAccessToPayment(Authentication auth, String paymentId, Collection<String> rolesReq) {
++        if (paymentId == null) return false;
++        var p = payments.findById(paymentId).orElse(null);
++        if (p == null) return false;
++        return hasRoleInOrg(auth, p.getOrgId(), rolesReq);
++    }
++}
+diff --git a/billing-api/src/main/java/com/condos/billing/service/AccountStatementService.java b/billing-api/src/main/java/com/condos/billing/service/AccountStatementService.java
+new file mode 100644
+index 0000000..d901ae5
+--- /dev/null
++++ b/billing-api/src/main/java/com/condos/billing/service/AccountStatementService.java
+@@ -0,0 +1,59 @@
++package com.condos.billing.service;
++
++import com.condos.billing.api.dto.AccountStatementResponse;
++import com.condos.billing.api.dto.ChargeResponse;
++import com.condos.billing.api.dto.PaymentResponse;
++import com.condos.billing.model.Charge;
++import com.condos.billing.model.Payment;
++import com.condos.billing.model.ReconciliationStatus;
++import com.condos.billing.repository.ChargeRepository;
++import com.condos.billing.repository.PaymentRepository;
++import lombok.RequiredArgsConstructor;
++import org.springframework.data.domain.PageRequest;
++import org.springframework.data.domain.Sort;
++import org.springframework.stereotype.Service;
++
++import java.math.BigDecimal;
++import java.util.List;
++
++@Service
++@RequiredArgsConstructor
++public class AccountStatementService {
++
++    private final ChargeRepository chargeRepo;
++    private final PaymentRepository paymentRepo;
++
++    /** Estado de cuenta on-the-fly de una unidad: agrega charges + payments (RN-PAG-05). */
++    public AccountStatementResponse forUnit(String unitId) {
++        List<Charge> charges = chargeRepo
++                .findByUnitId(unitId, PageRequest.of(0, 500, Sort.by(Sort.Direction.ASC, "dueDate")))
++                .getContent();
++        List<Payment> payments = paymentRepo
++                .findByUnitId(unitId, PageRequest.of(0, 500, Sort.by(Sort.Direction.ASC, "createdAt")))
++                .getContent();
++
++        BigDecimal totalCharged = charges.stream()
++                .map(Charge::getAmount)
++                .filter(java.util.Objects::nonNull)
++                .reduce(BigDecimal.ZERO, BigDecimal::add);
++
++        BigDecimal totalPaid = payments.stream()
++                .filter(p -> p.getReconciliationStatus() == ReconciliationStatus.RECONCILED)
++                .map(Payment::getAmount)
++                .filter(java.util.Objects::nonNull)
++                .reduce(BigDecimal.ZERO, BigDecimal::add);
++
++        String boardId = !charges.isEmpty() ? charges.get(0).getBoardId()
++                : (!payments.isEmpty() ? payments.get(0).getBoardId() : null);
++
++        return new AccountStatementResponse(
++                unitId,
++                boardId,
++                totalCharged,
++                totalPaid,
++                totalCharged.subtract(totalPaid),
++                charges.stream().map(ChargeResponse::from).toList(),
++                payments.stream().map(PaymentResponse::from).toList()
++        );
++    }
++}
+diff --git a/billing-api/src/main/java/com/condos/billing/service/BoardApiClient.java b/billing-api/src/main/java/com/condos/billing/service/BoardApiClient.java
+new file mode 100644
+index 0000000..642d918
+--- /dev/null
++++ b/billing-api/src/main/java/com/condos/billing/service/BoardApiClient.java
+@@ -0,0 +1,22 @@
++package com.condos.billing.service;
++
++import java.util.List;
++
++/**
++ * Cliente hacia board-api para resolver las unidades activas de una colonia
++ * al generar cargos.
++ *
++ * LIMITACIÓN CONOCIDA: esta llamada usa el JWT del usuario que hizo la
++ * petición original (se lo pasamos tal cual), NO un token de servicio. Eso
++ * funciona mientras quien genera cargos tenga permiso para listar unidades
++ * de ese board en board-api, pero no es la auth servicio-a-servicio "real"
++ * que se documentó como pendiente en el diseño (la misma que falta en
++ * condos-user-api -> condos-auth-api). Cuando se resuelva esa pieza de
++ * infraestructura compartida, esta clase debe cambiar a usar un token de
++ * servicio en vez de reenviar el del usuario.
++ */
++public interface BoardApiClient {
++    record UnitRef(String id, String identifier) {}
++
++    List<UnitRef> listActiveUnitIds(String boardId, String bearerToken);
++}
+diff --git a/billing-api/src/main/java/com/condos/billing/service/BoardApiClientImpl.java b/billing-api/src/main/java/com/condos/billing/service/BoardApiClientImpl.java
+new file mode 100644
+index 0000000..b1a5794
+--- /dev/null
++++ b/billing-api/src/main/java/com/condos/billing/service/BoardApiClientImpl.java
+@@ -0,0 +1,55 @@
++package com.condos.billing.service;
++
++import com.fasterxml.jackson.databind.JsonNode;
++import com.fasterxml.jackson.databind.ObjectMapper;
++import org.springframework.beans.factory.annotation.Value;
++import org.springframework.http.HttpEntity;
++import org.springframework.http.HttpHeaders;
++import org.springframework.http.HttpMethod;
++import org.springframework.http.HttpStatus;
++import org.springframework.stereotype.Service;
++import org.springframework.web.client.RestTemplate;
++import org.springframework.web.server.ResponseStatusException;
++import org.springframework.web.util.UriComponentsBuilder;
++
++import java.util.ArrayList;
++import java.util.List;
++
++@Service
++public class BoardApiClientImpl implements BoardApiClient {
++
++    private final RestTemplate rest = new RestTemplate();
++    private final ObjectMapper mapper = new ObjectMapper();
++
++    @Value("${board.api.base-url}")
++    private String boardApiBaseUrl;
++
++    @Override
++    public List<UnitRef> listActiveUnitIds(String boardId, String bearerToken) {
++        String url = UriComponentsBuilder.fromHttpUrl(boardApiBaseUrl)
++                .pathSegment("boards", boardId, "units")
++                .queryParam("size", 500)
++                .queryParam("includeInactive", false)
++                .toUriString();
++
++        HttpHeaders headers = new HttpHeaders();
++        headers.setBearerAuth(bearerToken);
++
++        try {
++            var res = rest.exchange(url, HttpMethod.GET, new HttpEntity<>(headers), String.class);
++            JsonNode root = mapper.readTree(res.getBody());
++            JsonNode content = root.has("content") ? root.get("content") : root;
++
++            List<UnitRef> units = new ArrayList<>();
++            if (content.isArray()) {
++                for (JsonNode n : content) {
++                    units.add(new UnitRef(n.get("id").asText(), n.get("identifier").asText()));
++                }
++            }
++            return units;
++        } catch (Exception e) {
++            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY,
++                    "No se pudo obtener las unidades de board-api para boardId=" + boardId + ": " + e.getMessage());
++        }
++    }
++}
+diff --git a/billing-api/src/main/java/com/condos/billing/service/ChargeService.java b/billing-api/src/main/java/com/condos/billing/service/ChargeService.java
+new file mode 100644
+index 0000000..ce61db7
+--- /dev/null
++++ b/billing-api/src/main/java/com/condos/billing/service/ChargeService.java
+@@ -0,0 +1,24 @@
++package com.condos.billing.service;
++
++import com.condos.billing.api.dto.CreateExtraordinaryChargeRequest;
++import com.condos.billing.model.Charge;
++import com.condos.billing.model.ChargeStatus;
++import org.springframework.data.domain.Page;
++import org.springframework.data.domain.Sort;
++
++import java.util.List;
++import java.util.Optional;
++
++public interface ChargeService {
++
++    /** Genera (si no existen ya) los cargos regulares del periodo para todas las unidades activas del board. */
++    List<Charge> generateForPeriod(String orgId, String boardId, String period, String bearerToken);
++
++    List<Charge> createExtraordinary(String orgId, CreateExtraordinaryChargeRequest req, String bearerToken);
++
++    Optional<Charge> get(String id);
++
++    Page<Charge> listByUnit(String unitId, ChargeStatus status, int page, int size, String sortBy, Sort.Direction dir);
++
++    Page<Charge> listByBoard(String boardId, ChargeStatus status, int page, int size, String sortBy, Sort.Direction dir);
++}
+diff --git a/billing-api/src/main/java/com/condos/billing/service/ChargeServiceImpl.java b/billing-api/src/main/java/com/condos/billing/service/ChargeServiceImpl.java
+new file mode 100644
+index 0000000..df0c667
+--- /dev/null
++++ b/billing-api/src/main/java/com/condos/billing/service/ChargeServiceImpl.java
+@@ -0,0 +1,136 @@
++package com.condos.billing.service;
++
++import com.condos.billing.api.dto.CreateExtraordinaryChargeRequest;
++import com.condos.billing.model.*;
++import com.condos.billing.repository.ChargeRepository;
++import com.condos.billing.repository.FeeScheduleRepository;
++import lombok.RequiredArgsConstructor;
++import org.springframework.dao.DuplicateKeyException;
++import org.springframework.data.domain.Page;
++import org.springframework.data.domain.PageRequest;
++import org.springframework.data.domain.Sort;
++import org.springframework.http.HttpStatus;
++import org.springframework.stereotype.Service;
++import org.springframework.web.server.ResponseStatusException;
++
++import java.time.Instant;
++import java.time.LocalDate;
++import java.time.ZoneOffset;
++import java.util.ArrayList;
++import java.util.List;
++import java.util.Optional;
++
++@Service
++@RequiredArgsConstructor
++public class ChargeServiceImpl implements ChargeService {
++
++    private final ChargeRepository charges;
++    private final FeeScheduleRepository schedules;
++    private final BoardApiClient boardApiClient;
++
++    @Override
++    public List<Charge> generateForPeriod(String orgId, String boardId, String period, String bearerToken) {
++        List<FeeSchedule> active = schedules.findByBoardIdAndActiveTrue(boardId);
++        if (active.isEmpty()) {
++            throw new ResponseStatusException(HttpStatus.CONFLICT,
++                    "No hay cuotas activas (FeeSchedule) configuradas para boardId=" + boardId);
++        }
++
++        var units = boardApiClient.listActiveUnitIds(boardId, bearerToken);
++        if (units.isEmpty()) {
++            throw new ResponseStatusException(HttpStatus.CONFLICT,
++                    "No hay unidades activas en boardId=" + boardId + " (o board-api no las devolvió)");
++        }
++
++        List<Charge> created = new ArrayList<>();
++        Instant dueDate = dueDateFor(period, active.get(0).getDueDayOfPeriod());
++
++        for (FeeSchedule schedule : active) {
++            for (var unit : units) {
++                boolean exists = charges
++                        .findByUnitIdAndFeeScheduleIdAndPeriod(unit.id(), schedule.getId(), period)
++                        .isPresent();
++                if (exists) continue;
++
++                Charge c = Charge.newCharge(
++                        orgId, boardId, unit.id(), schedule.getId(),
++                        ChargeType.REGULAR, schedule.getName(), schedule.getAmount(), period,
++                        dueDateFor(period, schedule.getDueDayOfPeriod()), null
++                );
++                try {
++                    created.add(charges.save(c));
++                } catch (DuplicateKeyException ignored) {
++                    // se generó en una corrida concurrente / carrera; no es un error real
++                }
++            }
++        }
++        return created;
++    }
++
++    @Override
++    public List<Charge> createExtraordinary(String orgId, CreateExtraordinaryChargeRequest req, String bearerToken) {
++        List<String> unitIds = req.unitIds();
++        if (unitIds == null || unitIds.isEmpty()) {
++            unitIds = boardApiClient.listActiveUnitIds(req.boardId(), bearerToken)
++                    .stream().map(BoardApiClient.UnitRef::id).toList();
++        }
++        if (unitIds.isEmpty()) {
++            throw new ResponseStatusException(HttpStatus.CONFLICT,
++                    "No hay unidades activas en boardId=" + req.boardId());
++        }
++
++        AssemblyRef assemblyRef = (req.actaNumber() != null || req.actaDate() != null || req.attachmentFileId() != null)
++                ? AssemblyRef.builder()
++                        .actaNumber(req.actaNumber())
++                        .actaDate(req.actaDate())
++                        .attachmentFileId(req.attachmentFileId())
++                        .build()
++                : null;
++
++        Instant dueDate = req.dueDate() != null ? req.dueDate() : Instant.now().plusSeconds(15L * 24 * 3600);
++
++        List<Charge> created = new ArrayList<>();
++        for (String unitId : unitIds) {
++            Charge c = Charge.newCharge(
++                    orgId, req.boardId(), unitId, null,
++                    ChargeType.EXTRAORDINARY, req.concept(), req.amount(), null, dueDate, assemblyRef
++            );
++            created.add(charges.save(c));
++        }
++        return created;
++    }
++
++    @Override
++    public Optional<Charge> get(String id) {
++        return charges.findById(id);
++    }
++
++    @Override
++    public Page<Charge> listByUnit(String unitId, ChargeStatus status, int page, int size, String sortBy, Sort.Direction dir) {
++        var pageable = PageRequest.of(page, size, Sort.by(dir, defaultSort(sortBy)));
++        return status != null
++                ? charges.findByUnitIdAndStatus(unitId, status, pageable)
++                : charges.findByUnitId(unitId, pageable);
++    }
++
++    @Override
++    public Page<Charge> listByBoard(String boardId, ChargeStatus status, int page, int size, String sortBy, Sort.Direction dir) {
++        var pageable = PageRequest.of(page, size, Sort.by(dir, defaultSort(sortBy)));
++        return status != null
++                ? charges.findByBoardIdAndStatus(boardId, status, pageable)
++                : charges.findByBoardId(boardId, pageable);
++    }
++
++    private String defaultSort(String sortBy) {
++        return (sortBy == null || sortBy.isBlank()) ? "dueDate" : sortBy;
++    }
++
++    private Instant dueDateFor(String period, int dueDayOfPeriod) {
++        // period = "yyyy-MM"
++        var ym = period.split("-");
++        int year = Integer.parseInt(ym[0]);
++        int month = Integer.parseInt(ym[1]);
++        int day = Math.min(dueDayOfPeriod, LocalDate.of(year, month, 1).lengthOfMonth());
++        return LocalDate.of(year, month, day).atStartOfDay(ZoneOffset.UTC).toInstant();
++    }
++}
+diff --git a/billing-api/src/main/java/com/condos/billing/service/FeeScheduleService.java b/billing-api/src/main/java/com/condos/billing/service/FeeScheduleService.java
+new file mode 100644
+index 0000000..12d3964
+--- /dev/null
++++ b/billing-api/src/main/java/com/condos/billing/service/FeeScheduleService.java
+@@ -0,0 +1,22 @@
++package com.condos.billing.service;
++
++import com.condos.billing.model.FeeFrequency;
++import com.condos.billing.model.FeeSchedule;
++import org.springframework.data.domain.Page;
++import org.springframework.data.domain.Sort;
++
++import java.math.BigDecimal;
++import java.util.Optional;
++
++public interface FeeScheduleService {
++
++    FeeSchedule create(String orgId, String boardId, String name, BigDecimal amount, String currency,
++                        FeeFrequency frequency, Integer dueDayOfPeriod, String createdBy);
++
++    Optional<FeeSchedule> get(String id);
++
++    FeeSchedule update(String id, String name, BigDecimal amount, String currency, FeeFrequency frequency,
++                        Integer dueDayOfPeriod, Boolean active);
++
++    Page<FeeSchedule> list(String boardId, int page, int size, String sortBy, Sort.Direction dir);
++}
+diff --git a/billing-api/src/main/java/com/condos/billing/service/FeeScheduleServiceImpl.java b/billing-api/src/main/java/com/condos/billing/service/FeeScheduleServiceImpl.java
+new file mode 100644
+index 0000000..b8b2aca
+--- /dev/null
++++ b/billing-api/src/main/java/com/condos/billing/service/FeeScheduleServiceImpl.java
+@@ -0,0 +1,65 @@
++package com.condos.billing.service;
++
++import com.condos.billing.model.FeeFrequency;
++import com.condos.billing.model.FeeSchedule;
++import com.condos.billing.repository.FeeScheduleRepository;
++import lombok.RequiredArgsConstructor;
++import org.springframework.data.domain.PageRequest;
++import org.springframework.data.domain.Page;
++import org.springframework.data.domain.Sort;
++import org.springframework.http.HttpStatus;
++import org.springframework.stereotype.Service;
++import org.springframework.web.server.ResponseStatusException;
++
++import java.math.BigDecimal;
++import java.time.Instant;
++import java.util.Optional;
++
++@Service
++@RequiredArgsConstructor
++public class FeeScheduleServiceImpl implements FeeScheduleService {
++
++    private final FeeScheduleRepository repo;
++
++    @Override
++    public FeeSchedule create(String orgId, String boardId, String name, BigDecimal amount, String currency,
++                               FeeFrequency frequency, Integer dueDayOfPeriod, String createdBy) {
++        FeeSchedule s = FeeSchedule.newSchedule(
++                orgId, boardId, name, amount,
++                (currency == null || currency.isBlank()) ? "MXN" : currency,
++                frequency,
++                dueDayOfPeriod == null ? 5 : dueDayOfPeriod,
++                createdBy
++        );
++        return repo.save(s);
++    }
++
++    @Override
++    public Optional<FeeSchedule> get(String id) {
++        return repo.findById(id);
++    }
++
++    @Override
++    public FeeSchedule update(String id, String name, BigDecimal amount, String currency, FeeFrequency frequency,
++                               Integer dueDayOfPeriod, Boolean active) {
++        FeeSchedule s = repo.findById(id).orElseThrow(() -> notFound(id));
++        if (name != null) s.setName(name);
++        if (amount != null) s.setAmount(amount);
++        if (currency != null) s.setCurrency(currency);
++        if (frequency != null) s.setFrequency(frequency);
++        if (dueDayOfPeriod != null) s.setDueDayOfPeriod(dueDayOfPeriod);
++        if (active != null) s.setActive(active);
++        s.setUpdatedAt(Instant.now());
++        return repo.save(s);
++    }
++
++    @Override
++    public Page<FeeSchedule> list(String boardId, int page, int size, String sortBy, Sort.Direction dir) {
++        var pageable = PageRequest.of(page, size, Sort.by(dir, sortBy == null || sortBy.isBlank() ? "createdAt" : sortBy));
++        return repo.findByBoardId(boardId, pageable);
++    }
++
++    private ResponseStatusException notFound(String id) {
++        return new ResponseStatusException(HttpStatus.NOT_FOUND, "fee schedule not found: " + id);
++    }
++}
+diff --git a/billing-api/src/main/java/com/condos/billing/service/PaymentService.java b/billing-api/src/main/java/com/condos/billing/service/PaymentService.java
+new file mode 100644
+index 0000000..284b725
+--- /dev/null
++++ b/billing-api/src/main/java/com/condos/billing/service/PaymentService.java
+@@ -0,0 +1,25 @@
++package com.condos.billing.service;
++
++import com.condos.billing.model.Payment;
++import com.condos.billing.model.PaymentMethod;
++import com.condos.billing.model.ReconciliationStatus;
++import org.springframework.data.domain.Page;
++import org.springframework.data.domain.Sort;
++
++import java.math.BigDecimal;
++import java.util.List;
++import java.util.Optional;
++
++public interface PaymentService {
++
++    Payment create(String orgId, String boardId, String unitId, List<String> chargeIds,
++                    BigDecimal amount, PaymentMethod method, String receiptFileId);
++
++    Optional<Payment> get(String id);
++
++    Payment reconcile(String id, boolean approve, String reconciledBy);
++
++    Page<Payment> listByUnit(String unitId, ReconciliationStatus status, int page, int size, String sortBy, Sort.Direction dir);
++
++    Page<Payment> listByBoard(String boardId, ReconciliationStatus status, int page, int size, String sortBy, Sort.Direction dir);
++}
+diff --git a/billing-api/src/main/java/com/condos/billing/service/PaymentServiceImpl.java b/billing-api/src/main/java/com/condos/billing/service/PaymentServiceImpl.java
+new file mode 100644
+index 0000000..ca019d2
+--- /dev/null
++++ b/billing-api/src/main/java/com/condos/billing/service/PaymentServiceImpl.java
+@@ -0,0 +1,95 @@
++package com.condos.billing.service;
++
++import com.condos.billing.model.*;
++import com.condos.billing.repository.ChargeRepository;
++import com.condos.billing.repository.PaymentRepository;
++import lombok.RequiredArgsConstructor;
++import org.springframework.data.domain.Page;
++import org.springframework.data.domain.PageRequest;
++import org.springframework.data.domain.Sort;
++import org.springframework.http.HttpStatus;
++import org.springframework.stereotype.Service;
++import org.springframework.web.server.ResponseStatusException;
++
++import java.math.BigDecimal;
++import java.time.Instant;
++import java.util.List;
++import java.util.Optional;
++
++@Service
++@RequiredArgsConstructor
++public class PaymentServiceImpl implements PaymentService {
++
++    private final PaymentRepository payments;
++    private final ChargeRepository charges;
++
++    @Override
++    public Payment create(String orgId, String boardId, String unitId, List<String> chargeIds,
++                           BigDecimal amount, PaymentMethod method, String receiptFileId) {
++        // valida que los cargos existan y pertenezcan a la misma unidad
++        for (String chargeId : chargeIds) {
++            Charge c = charges.findById(chargeId)
++                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "charge not found: " + chargeId));
++            if (!unitId.equals(c.getUnitId())) {
++                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
++                        "El cargo " + chargeId + " no pertenece a la unidad " + unitId);
++            }
++        }
++        Payment p = Payment.newPayment(orgId, boardId, unitId, chargeIds, amount, method, receiptFileId);
++        return payments.save(p);
++    }
++
++    @Override
++    public Optional<Payment> get(String id) {
++        return payments.findById(id);
++    }
++
++    @Override
++    public Payment reconcile(String id, boolean approve, String reconciledBy) {
++        Payment p = payments.findById(id)
++                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "payment not found: " + id));
++
++        p.setReconciliationStatus(approve ? ReconciliationStatus.RECONCILED : ReconciliationStatus.REJECTED);
++        p.setReconciledBy(reconciledBy);
++        p.setReconciledAt(Instant.now());
++        p.setUpdatedAt(Instant.now());
++        payments.save(p);
++
++        // NOTA (simplificación Fase 1): un pago conciliado marca como PAID
++        // todos los cargos que cubre, sin prorratear montos parciales entre
++        // varios cargos. Si en el futuro se necesita pago parcial exacto por
++        // cargo, hay que sumar pagos reconciliados por chargeId y comparar
++        // contra Charge.amount para decidir PARTIALLY_PAID vs PAID.
++        if (approve && p.getChargeIds() != null) {
++            for (String chargeId : p.getChargeIds()) {
++                charges.findById(chargeId).ifPresent(c -> {
++                    c.setStatus(ChargeStatus.PAID);
++                    c.setUpdatedAt(Instant.now());
++                    charges.save(c);
++                });
++            }
++        }
++
++        return p;
++    }
++
++    @Override
++    public Page<Payment> listByUnit(String unitId, ReconciliationStatus status, int page, int size, String sortBy, Sort.Direction dir) {
++        var pageable = PageRequest.of(page, size, Sort.by(dir, defaultSort(sortBy)));
++        return status != null
++                ? payments.findByUnitIdAndReconciliationStatus(unitId, status, pageable)
++                : payments.findByUnitId(unitId, pageable);
++    }
++
++    @Override
++    public Page<Payment> listByBoard(String boardId, ReconciliationStatus status, int page, int size, String sortBy, Sort.Direction dir) {
++        var pageable = PageRequest.of(page, size, Sort.by(dir, defaultSort(sortBy)));
++        return status != null
++                ? payments.findByBoardIdAndReconciliationStatus(boardId, status, pageable)
++                : payments.findByBoardId(boardId, pageable);
++    }
++
++    private String defaultSort(String sortBy) {
++        return (sortBy == null || sortBy.isBlank()) ? "createdAt" : sortBy;
++    }
++}
+diff --git a/billing-api/src/main/resources/application.yml b/billing-api/src/main/resources/application.yml
+new file mode 100644
+index 0000000..e8d40d7
+--- /dev/null
++++ b/billing-api/src/main/resources/application.yml
+@@ -0,0 +1,45 @@
++server:
++  port: 8080
++
++spring:
++  autoconfigure:
++    exclude:
++      - org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration
++      - org.springframework.boot.autoconfigure.jdbc.DataSourceTransactionManagerAutoConfiguration
++      - org.springframework.boot.autoconfigure.orm.jpa.HibernateJpaAutoConfiguration
++  profiles:
++    active: ${SPRING_PROFILES_ACTIVE:dev}
++  data:
++    mongodb:
++      uri: ${SPRING_DATA_MONGODB_URI}
++  main:
++    allow-bean-definition-overriding: true
++
++management:
++  endpoints:
++    web:
++      exposure:
++        include: health,info
++  endpoint:
++    health:
++      show-details: never
++
++logging:
++  level:
++    root: ${LOG_LEVEL:INFO}
++    org.springframework: ${SPRING_LOG_LEVEL:WARN}
++    org.springframework.security: ${SECURITY_LOG_LEVEL:WARN}
++    com.condos: ${APP_LOG_LEVEL:DEBUG}
++
++board:
++  api:
++    base-url: ${BOARD_API_URL:http://board-api:8080/condos/api/board}
++
++app:
++  errors:
++    verbose: ${ERRORS_VERBOSE:false}
++  security:
++    jwt:
++      secret: ${JWT_SECRET}
++      issuer: condos-auth
++      expires-minutes: ${JWT_EXPIRES_MINUTES:240}
+diff --git a/docker-compose.yml b/docker-compose.yml
+index 8bc2f7b..693a4e4 100755
+--- a/docker-compose.yml
++++ b/docker-compose.yml
+@@ -199,6 +199,32 @@ services:
+       minio:
+         condition: service_healthy
+ 
++  billing-api:
++    build:
++      context: .
++      dockerfile: billing-api/Dockerfile
++    container_name: ${PROJECT_NAME:-condos}-billing-api
++    restart: unless-stopped
++    environment:
++      SPRING_DATA_MONGODB_URI: ${SPRING_DATA_MONGODB_URI:?SPRING_DATA_MONGODB_URI is required}
++      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-dev}
++      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
++      JWT_EXPIRES_MINUTES: ${JWT_EXPIRES_MINUTES:-240}
++      BOARD_API_URL: http://board-api:8080/condos/api/board
++    networks:
++      - default
++    healthcheck:
++      test: ["CMD", "wget", "-qO-", "http://localhost:8080/actuator/health"]
++      interval: 30s
++      timeout: 10s
++      retries: 3
++      start_period: 30s
++    depends_on:
++      mongo:
++        condition: service_healthy
++      board-api:
++        condition: service_healthy
++
+   # ===========================================
+   # NOTA: notify-api NO se incluye aquí.
+   # Su código fuente es una copia duplicada de auth-api
+diff --git a/gateway/traefik_dynamic.local.yml b/gateway/traefik_dynamic.local.yml
+new file mode 100644
+index 0000000..08c75dd
+--- /dev/null
++++ b/gateway/traefik_dynamic.local.yml
+@@ -0,0 +1,41 @@
++http:
++  routers:
++    # ====== Routers SOLO para desarrollo local ======
++    # Los routers de traefik_dynamic.yml exigen Host(api.condosadmin.site) y
++    # entryPoints websecure (443, TLS con Let's Encrypt), que no existen en local.
++    # Estos duplican las mismas rutas pero matcheando localhost por el
++    # entrypoint "web" (80), sin TLS. No se usan en producción.
++    r-auth-local:
++      rule: "Host(`localhost`) && PathPrefix(`/condos/api/auth`)"
++      service: s-auth
++      entryPoints: ["web"]
++      middlewares: ["cors-chain"]
++
++    r-tenant-local:
++      rule: "Host(`localhost`) && (PathPrefix(`/condos/api/tenant`) || PathPrefix(`/condos/api/admin/tenant`))"
++      service: s-tenant
++      entryPoints: ["web"]
++      middlewares: ["cors-chain"]
++
++    r-user-local:
++      rule: "Host(`localhost`) && (PathPrefix(`/condos/api/user`) || PathPrefix(`/condos/api/admin/user`))"
++      service: s-user
++      entryPoints: ["web"]
++      middlewares: ["cors-chain"]
++
++    r-user-internal-local:
++      rule: "Host(`localhost`) && PathPrefix(`/internal/users`)"
++      service: s-user
++      entryPoints: ["web"]
++
++    r-board-local:
++      rule: "Host(`localhost`) && (PathPrefix(`/condos/api/board`) || PathPrefix(`/condos/api/files`))"
++      service: s-board
++      entryPoints: ["web"]
++      middlewares: ["cors-chain"]
++
++    r-billing-local:
++      rule: "Host(`localhost`) && PathPrefix(`/condos/api/billing`)"
++      service: s-billing
++      entryPoints: ["web"]
++      middlewares: ["cors-chain"]
+diff --git a/gateway/traefik_dynamic.yml b/gateway/traefik_dynamic.yml
+index 8804dad..e150d63 100644
+--- a/gateway/traefik_dynamic.yml
++++ b/gateway/traefik_dynamic.yml
+@@ -80,6 +80,14 @@ http:
+       tls:
+         certResolver: le
+ 
++    r-billing:
++      rule: "Host(`api.condosadmin.site`) && PathPrefix(`/condos/api/billing`)"
++      service: s-billing
++      entryPoints: ["websecure"]
++      middlewares: ["cors-chain"]
++      tls:
++        certResolver: le
++
+     r-auth-swagger:
+       rule: "Host(`api.condosadmin.site`) && (PathPrefix(`/condos/api/auth/swagger-ui`) || PathPrefix(`/condos/api/auth/v3/api-docs`))"
+       service: s-auth
+@@ -124,6 +132,10 @@ http:
+       loadBalancer:
+         servers:
+           - url: "http://board-api:8080"
++    s-billing:
++      loadBalancer:
++        servers:
++          - url: "http://billing-api:8080"
+     # s-minio: definido pero sin router - MinIO NO se expone directo a internet.
+     # Los archivos se sirven vía board-api (/condos/api/files/**), que valida JWT
+     # antes de leer/escribir en MinIO internamente (http://minio:9000).
+diff --git a/pom.xml b/pom.xml
+index 791e328..87c88ff 100644
+--- a/pom.xml
++++ b/pom.xml
+@@ -16,7 +16,8 @@
+         <module>tenant-api</module>
+         <module>user-api</module>
+         <module>board-api</module>
+-        <!-- luego: tenant-api, user-api, board-api, task-api, etc. -->
++        <module>billing-api</module>
++        <!-- luego: task-api, etc. -->
+     </modules>
+ 
+     <properties>

@@ -1,4 +1,4 @@
-package com.condos.board.config;
+package com.condos.billing.config;
 
 import com.condos.shared.security.JwtService;
 import io.jsonwebtoken.JwtException;

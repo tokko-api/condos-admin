@@ -1,0 +1,447 @@
+diff --git a/billing-api/src/main/java/com/condos/billing/api/PaymentController.java b/billing-api/src/main/java/com/condos/billing/api/PaymentController.java
+new file mode 100644
+index 0000000..c6e35fb
+--- /dev/null
++++ b/billing-api/src/main/java/com/condos/billing/api/PaymentController.java
+@@ -0,0 +1,110 @@
++package com.condos.billing.api;
++
++import com.condos.billing.api.dto.*;
++import com.condos.billing.model.ReconciliationStatus;
++import com.condos.billing.service.PaymentBulkImportService;
++import com.condos.billing.service.PaymentService;
++import jakarta.servlet.http.HttpServletRequest;
++import jakarta.validation.Valid;
++import lombok.RequiredArgsConstructor;
++import org.springframework.data.domain.Page;
++import org.springframework.data.domain.Sort;
++import org.springframework.http.HttpStatus;
++import org.springframework.security.access.prepost.PreAuthorize;
++import org.springframework.security.core.Authentication;
++import org.springframework.web.bind.annotation.*;
++import org.springframework.web.server.ResponseStatusException;
++
++import java.util.List;
++
++@RestController
++@RequestMapping("/condos/api/billing")
++@RequiredArgsConstructor
++public class PaymentController {
++
++    private final PaymentService payments;
++    private final PaymentBulkImportService bulkImport;
++
++    @PostMapping("/boards/{boardId}/payments")
++    @ResponseStatus(HttpStatus.CREATED)
++    @PreAuthorize("""
++        @jwtAuth.isSuperadmin(authentication) or
++        @jwtAuth.hasRoleInOrg(authentication, #orgId, {'ADMINISTRADOR','SUPERVISOR','OPERATIVO'})
++    """)
++    public PaymentResponse create(@PathVariable String boardId,
++                                   @RequestParam String orgId,
++                                   @Valid @RequestBody CreatePaymentRequest req) {
++        var p = payments.create(orgId, boardId, req.unitId(), req.chargeIds(), req.amount(),
++                req.method(), req.receiptFileId());
++        return PaymentResponse.from(p);
++    }
++
++    @GetMapping("/payments")
++    @PreAuthorize("""
++        @jwtAuth.isSuperadmin(authentication) or
++        @jwtAuth.hasRoleInOrg(authentication, #orgId, {'ADMINISTRADOR','SUPERVISOR','OPERATIVO'})
++    """)
++    public Page<PaymentResponse> list(@RequestParam String orgId,
++                                       @RequestParam(required = false) String unitId,
++                                       @RequestParam(required = false) String boardId,
++                                       @RequestParam(required = false) ReconciliationStatus reconciliationStatus,
++                                       @RequestParam(defaultValue = "0") int page,
++                                       @RequestParam(defaultValue = "50") int size,
++                                       @RequestParam(defaultValue = "createdAt") String sortBy,
++                                       @RequestParam(defaultValue = "DESC") Sort.Direction dir) {
++        if (unitId == null && boardId == null) {
++            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Debes indicar unitId o boardId");
++        }
++        var result = unitId != null
++                ? payments.listByUnit(unitId, reconciliationStatus, page, size, sortBy, dir)
++                : payments.listByBoard(boardId, reconciliationStatus, page, size, sortBy, dir);
++        return result.map(PaymentResponse::from);
++    }
++
++    @GetMapping("/payments/{id}")
++    @PreAuthorize("@jwtAuth.isSuperadmin(authentication) or @jwtAuth.hasAccessToPayment(authentication, #id, {'ADMINISTRADOR','SUPERVISOR','OPERATIVO'})")
++    public PaymentResponse get(@PathVariable String id) {
++        var p = payments.get(id).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
++        return PaymentResponse.from(p);
++    }
++
++    @PostMapping("/payments/{id}/reconcile")
++    @PreAuthorize("@jwtAuth.isSuperadmin(authentication) or @jwtAuth.hasAccessToPayment(authentication, #id, {'ADMINISTRADOR','SUPERVISOR'})")
++    public PaymentResponse reconcile(@PathVariable String id,
++                                      @Valid @RequestBody ReconcilePaymentRequest req,
++                                      Authentication authentication) {
++        var p = payments.reconcile(id, req.approve(), authentication.getName());
++        return PaymentResponse.from(p);
++    }
++
++    /** Conciliar/rechazar varios pagos de un jalón (opción A del flujo masivo). */
++    @PostMapping("/payments/reconcile-bulk")
++    @PreAuthorize("""
++        @jwtAuth.isSuperadmin(authentication) or
++        @jwtAuth.hasRoleInOrg(authentication, #orgId, {'ADMINISTRADOR','SUPERVISOR'})
++    """)
++    public List<BulkResultRow> reconcileBulk(@RequestParam String orgId,
++                                              @Valid @RequestBody BulkReconcileRequest req,
++                                              Authentication authentication) {
++        return payments.bulkReconcile(orgId, req.paymentIds(), req.approve(), authentication.getName());
++    }
++
++    /** Importar pagos en lote desde Excel/CSV, ya parseado por el frontend (opción B del flujo masivo). */
++    @PostMapping("/boards/{boardId}/payments/bulk-import")
++    @PreAuthorize("""
++        @jwtAuth.isSuperadmin(authentication) or
++        @jwtAuth.hasRoleInOrg(authentication, #orgId, {'ADMINISTRADOR','SUPERVISOR'})
++    """)
++    public List<BulkResultRow> bulkImportPayments(@PathVariable String boardId,
++                                                   @RequestParam String orgId,
++                                                   @Valid @RequestBody BulkImportPaymentsRequest req,
++                                                   HttpServletRequest http) {
++        return bulkImport.importPayments(orgId, boardId, req.rows(), bearerToken(http));
++    }
++
++    private String bearerToken(HttpServletRequest http) {
++        String h = http.getHeader("Authorization");
++        if (h != null && h.startsWith("Bearer ")) return h.substring(7);
++        throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "missing bearer token");
++    }
++}
+diff --git a/billing-api/src/main/java/com/condos/billing/api/dto/BulkImportPaymentRow.java b/billing-api/src/main/java/com/condos/billing/api/dto/BulkImportPaymentRow.java
+new file mode 100644
+index 0000000..7f09670
+--- /dev/null
++++ b/billing-api/src/main/java/com/condos/billing/api/dto/BulkImportPaymentRow.java
+@@ -0,0 +1,15 @@
++package com.condos.billing.api.dto;
++
++import com.condos.billing.model.PaymentMethod;
++import jakarta.validation.constraints.DecimalMin;
++import jakarta.validation.constraints.NotBlank;
++import jakarta.validation.constraints.NotNull;
++
++import java.math.BigDecimal;
++
++/** Una fila del Excel/CSV: identificador de unidad tal cual aparece en board-api ("Casa 12"). */
++public record BulkImportPaymentRow(
++        @NotBlank String unitIdentifier,
++        @NotNull @DecimalMin(value = "0.01") BigDecimal amount,
++        PaymentMethod method // opcional, default TRANSFER
++) {}
+diff --git a/billing-api/src/main/java/com/condos/billing/api/dto/BulkImportPaymentsRequest.java b/billing-api/src/main/java/com/condos/billing/api/dto/BulkImportPaymentsRequest.java
+new file mode 100644
+index 0000000..88ce38c
+--- /dev/null
++++ b/billing-api/src/main/java/com/condos/billing/api/dto/BulkImportPaymentsRequest.java
+@@ -0,0 +1,10 @@
++package com.condos.billing.api.dto;
++
++import jakarta.validation.constraints.NotEmpty;
++import jakarta.validation.constraints.Size;
++
++import java.util.List;
++
++public record BulkImportPaymentsRequest(
++        @NotEmpty @Size(max = 500) List<BulkImportPaymentRow> rows
++) {}
+diff --git a/billing-api/src/main/java/com/condos/billing/api/dto/BulkReconcileRequest.java b/billing-api/src/main/java/com/condos/billing/api/dto/BulkReconcileRequest.java
+new file mode 100644
+index 0000000..deb0511
+--- /dev/null
++++ b/billing-api/src/main/java/com/condos/billing/api/dto/BulkReconcileRequest.java
+@@ -0,0 +1,11 @@
++package com.condos.billing.api.dto;
++
++import jakarta.validation.constraints.NotEmpty;
++import jakarta.validation.constraints.NotNull;
++
++import java.util.List;
++
++public record BulkReconcileRequest(
++        @NotEmpty List<String> paymentIds,
++        @NotNull Boolean approve
++) {}
+diff --git a/billing-api/src/main/java/com/condos/billing/api/dto/BulkResultRow.java b/billing-api/src/main/java/com/condos/billing/api/dto/BulkResultRow.java
+new file mode 100644
+index 0000000..b76ed8a
+--- /dev/null
++++ b/billing-api/src/main/java/com/condos/billing/api/dto/BulkResultRow.java
+@@ -0,0 +1,17 @@
++package com.condos.billing.api.dto;
++
++public record BulkResultRow(
++        String reference,   // paymentId o el identificador de unidad, según la operación
++        String status,      // "OK" | "ERROR"
++        String message,
++        String paymentId,   // solo en bulk-import: el pago creado (null si error)
++        Integer coveredChargesCount
++) {
++    public static BulkResultRow ok(String reference, String message, String paymentId, Integer coveredChargesCount) {
++        return new BulkResultRow(reference, "OK", message, paymentId, coveredChargesCount);
++    }
++
++    public static BulkResultRow error(String reference, String message) {
++        return new BulkResultRow(reference, "ERROR", message, null, null);
++    }
++}
+diff --git a/billing-api/src/main/java/com/condos/billing/service/PaymentBulkImportService.java b/billing-api/src/main/java/com/condos/billing/service/PaymentBulkImportService.java
+new file mode 100644
+index 0000000..01ef525
+--- /dev/null
++++ b/billing-api/src/main/java/com/condos/billing/service/PaymentBulkImportService.java
+@@ -0,0 +1,86 @@
++package com.condos.billing.service;
++
++import com.condos.billing.api.dto.BulkImportPaymentRow;
++import com.condos.billing.api.dto.BulkResultRow;
++import com.condos.billing.model.Charge;
++import com.condos.billing.model.ChargeStatus;
++import com.condos.billing.model.PaymentMethod;
++import lombok.RequiredArgsConstructor;
++import org.springframework.data.domain.Sort;
++import org.springframework.stereotype.Service;
++
++import java.math.BigDecimal;
++import java.util.ArrayList;
++import java.util.List;
++
++/**
++ * Importa pagos en lote desde un archivo (Excel/CSV) que el frontend ya
++ * parseó a filas { unitIdentifier, amount, method }.
++ *
++ * Para cada fila:
++ *  1. Resuelve unitIdentifier -> unitId consultando board-api (BoardApiClient).
++ *  2. Toma los cargos PENDING de esa unidad, ordenados por vencimiento, y
++ *     selecciona los necesarios hasta cubrir el monto informado (simplificación
++ *     Fase 1: no reparte montos parciales entre cargos, ver PaymentServiceImpl).
++ *  3. Crea el Payment con esos chargeIds.
++ * Nunca lanza excepción por fila: cada una reporta su propio resultado, para
++ * que una fila con error no tumbe la importación completa.
++ */
++@Service
++@RequiredArgsConstructor
++public class PaymentBulkImportService {
++
++    private final BoardApiClient boardApiClient;
++    private final ChargeService chargeService;
++    private final PaymentService paymentService;
++
++    public List<BulkResultRow> importPayments(String orgId, String boardId,
++                                               List<BulkImportPaymentRow> rows, String bearerToken) {
++        var units = boardApiClient.listActiveUnitIds(boardId, bearerToken);
++        List<BulkResultRow> results = new ArrayList<>();
++
++        for (BulkImportPaymentRow row : rows) {
++            String identifier = row.unitIdentifier() == null ? "" : row.unitIdentifier().trim();
++            try {
++                var unit = units.stream()
++                        .filter(u -> u.identifier().trim().equalsIgnoreCase(identifier))
++                        .findFirst();
++
++                if (unit.isEmpty()) {
++                    results.add(BulkResultRow.error(identifier, "Unidad no encontrada en esta colonia: \"" + identifier + "\""));
++                    continue;
++                }
++
++                List<Charge> pending = chargeService
++                        .listByUnit(unit.get().id(), ChargeStatus.PENDING, 0, 200, "dueDate", Sort.Direction.ASC)
++                        .getContent();
++
++                if (pending.isEmpty()) {
++                    results.add(BulkResultRow.error(identifier, "La unidad no tiene cargos pendientes"));
++                    continue;
++                }
++
++                List<String> chosen = new ArrayList<>();
++                BigDecimal running = BigDecimal.ZERO;
++                for (Charge c : pending) {
++                    if (running.compareTo(row.amount()) >= 0) break;
++                    chosen.add(c.getId());
++                    running = running.add(c.getAmount());
++                }
++
++                PaymentMethod method = row.method() != null ? row.method() : PaymentMethod.TRANSFER;
++                var payment = paymentService.create(orgId, boardId, unit.get().id(), chosen, row.amount(), method, null);
++
++                results.add(BulkResultRow.ok(
++                        identifier,
++                        "Pago registrado, cubre " + chosen.size() + " cargo(s) (pendiente de conciliar)",
++                        payment.getId(),
++                        chosen.size()
++                ));
++            } catch (Exception e) {
++                results.add(BulkResultRow.error(identifier, e.getMessage()));
++            }
++        }
++        return results;
++    }
++}
+diff --git a/billing-api/src/main/java/com/condos/billing/service/PaymentService.java b/billing-api/src/main/java/com/condos/billing/service/PaymentService.java
+new file mode 100644
+index 0000000..50eda61
+--- /dev/null
++++ b/billing-api/src/main/java/com/condos/billing/service/PaymentService.java
+@@ -0,0 +1,29 @@
++package com.condos.billing.service;
++
++import com.condos.billing.api.dto.BulkResultRow;
++import com.condos.billing.model.Payment;
++import com.condos.billing.model.PaymentMethod;
++import com.condos.billing.model.ReconciliationStatus;
++import org.springframework.data.domain.Page;
++import org.springframework.data.domain.Sort;
++
++import java.math.BigDecimal;
++import java.util.List;
++import java.util.Optional;
++
++public interface PaymentService {
++
++    Payment create(String orgId, String boardId, String unitId, List<String> chargeIds,
++                    BigDecimal amount, PaymentMethod method, String receiptFileId);
++
++    Optional<Payment> get(String id);
++
++    Payment reconcile(String id, boolean approve, String reconciledBy);
++
++    /** Concilia/rechaza varios pagos en lote, validando que cada uno pertenezca a orgId. Nunca lanza: reporta error por fila. */
++    List<BulkResultRow> bulkReconcile(String orgId, List<String> paymentIds, boolean approve, String reconciledBy);
++
++    Page<Payment> listByUnit(String unitId, ReconciliationStatus status, int page, int size, String sortBy, Sort.Direction dir);
++
++    Page<Payment> listByBoard(String boardId, ReconciliationStatus status, int page, int size, String sortBy, Sort.Direction dir);
++}
+diff --git a/billing-api/src/main/java/com/condos/billing/service/PaymentServiceImpl.java b/billing-api/src/main/java/com/condos/billing/service/PaymentServiceImpl.java
+new file mode 100644
+index 0000000..b8e6035
+--- /dev/null
++++ b/billing-api/src/main/java/com/condos/billing/service/PaymentServiceImpl.java
+@@ -0,0 +1,121 @@
++package com.condos.billing.service;
++
++import com.condos.billing.api.dto.BulkResultRow;
++import com.condos.billing.model.*;
++import com.condos.billing.repository.ChargeRepository;
++import com.condos.billing.repository.PaymentRepository;
++import lombok.RequiredArgsConstructor;
++import org.springframework.data.domain.Page;
++import org.springframework.data.domain.PageRequest;
++import org.springframework.data.domain.Sort;
++import org.springframework.http.HttpStatus;
++import org.springframework.stereotype.Service;
++import org.springframework.web.server.ResponseStatusException;
++
++import java.math.BigDecimal;
++import java.time.Instant;
++import java.util.ArrayList;
++import java.util.List;
++import java.util.Objects;
++import java.util.Optional;
++
++@Service
++@RequiredArgsConstructor
++public class PaymentServiceImpl implements PaymentService {
++
++    private final PaymentRepository payments;
++    private final ChargeRepository charges;
++
++    @Override
++    public Payment create(String orgId, String boardId, String unitId, List<String> chargeIds,
++                           BigDecimal amount, PaymentMethod method, String receiptFileId) {
++        // valida que los cargos existan y pertenezcan a la misma unidad
++        for (String chargeId : chargeIds) {
++            Charge c = charges.findById(chargeId)
++                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "charge not found: " + chargeId));
++            if (!unitId.equals(c.getUnitId())) {
++                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
++                        "El cargo " + chargeId + " no pertenece a la unidad " + unitId);
++            }
++        }
++        Payment p = Payment.newPayment(orgId, boardId, unitId, chargeIds, amount, method, receiptFileId);
++        return payments.save(p);
++    }
++
++    @Override
++    public Optional<Payment> get(String id) {
++        return payments.findById(id);
++    }
++
++    @Override
++    public Payment reconcile(String id, boolean approve, String reconciledBy) {
++        Payment p = payments.findById(id)
++                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "payment not found: " + id));
++
++        p.setReconciliationStatus(approve ? ReconciliationStatus.RECONCILED : ReconciliationStatus.REJECTED);
++        p.setReconciledBy(reconciledBy);
++        p.setReconciledAt(Instant.now());
++        p.setUpdatedAt(Instant.now());
++        payments.save(p);
++
++        // NOTA (simplificación Fase 1): un pago conciliado marca como PAID
++        // todos los cargos que cubre, sin prorratear montos parciales entre
++        // varios cargos. Si en el futuro se necesita pago parcial exacto por
++        // cargo, hay que sumar pagos reconciliados por chargeId y comparar
++        // contra Charge.amount para decidir PARTIALLY_PAID vs PAID.
++        if (approve && p.getChargeIds() != null) {
++            for (String chargeId : p.getChargeIds()) {
++                charges.findById(chargeId).ifPresent(c -> {
++                    c.setStatus(ChargeStatus.PAID);
++                    c.setUpdatedAt(Instant.now());
++                    charges.save(c);
++                });
++            }
++        }
++
++        return p;
++    }
++
++    @Override
++    public List<BulkResultRow> bulkReconcile(String orgId, List<String> paymentIds, boolean approve, String reconciledBy) {
++        List<BulkResultRow> results = new ArrayList<>();
++        for (String id : paymentIds) {
++            try {
++                Payment p = payments.findById(id).orElse(null);
++                if (p == null) {
++                    results.add(BulkResultRow.error(id, "Pago no encontrado"));
++                    continue;
++                }
++                if (!Objects.equals(orgId, p.getOrgId())) {
++                    results.add(BulkResultRow.error(id, "El pago no pertenece a esta organización"));
++                    continue;
++                }
++                reconcile(id, approve, reconciledBy);
++                results.add(BulkResultRow.ok(id, approve ? "Conciliado" : "Rechazado", id, null));
++            } catch (Exception e) {
++                results.add(BulkResultRow.error(id, e.getMessage()));
++            }
++        }
++        return results;
++    }
++
++    @Override
++    public Page<Payment> listByUnit(String unitId, ReconciliationStatus status, int page, int size, String sortBy, Sort.Direction dir) {
++        var pageable = PageRequest.of(page, size, Sort.by(dir, defaultSort(sortBy)));
++        return status != null
++                ? payments.findByUnitIdAndReconciliationStatus(unitId, status, pageable)
++                : payments.findByUnitId(unitId, pageable);
++    }
++
++    @Override
++    public Page<Payment> listByBoard(String boardId, ReconciliationStatus status, int page, int size, String sortBy, Sort.Direction dir) {
++        var pageable = PageRequest.of(page, size, Sort.by(dir, defaultSort(sortBy)));
++        return status != null
++                ? payments.findByBoardIdAndReconciliationStatus(boardId, status, pageable)
++                : payments.findByBoardId(boardId, pageable);
++    }
++
++    private String defaultSort(String sortBy) {
++        return (sortBy == null || sortBy.isBlank()) ? "createdAt" : sortBy;
++    }
++}

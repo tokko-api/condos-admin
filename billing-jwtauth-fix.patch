@@ -1,0 +1,24 @@
+diff --git a/billing-api/src/main/java/com/condos/billing/security/JwtAuth.java b/billing-api/src/main/java/com/condos/billing/security/JwtAuth.java
+index 818095b..f3b04d3 100644
+--- a/billing-api/src/main/java/com/condos/billing/security/JwtAuth.java
++++ b/billing-api/src/main/java/com/condos/billing/security/JwtAuth.java
+@@ -4,7 +4,6 @@ import com.condos.billing.repository.ChargeRepository;
+ import com.condos.billing.repository.FeeScheduleRepository;
+ import com.condos.billing.repository.PaymentRepository;
+ import org.springframework.security.core.Authentication;
+-import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
+ import org.springframework.stereotype.Component;
+ 
+ import java.util.*;
+@@ -24,9 +23,8 @@ public class JwtAuth {
+ 
+     @SuppressWarnings("unchecked")
+     private Map<String, Object> claims(Authentication auth) {
+-        if (auth instanceof JwtAuthenticationToken jat) {
+-            return jat.getTokenAttributes();
+-        }
++        // billing-api siempre coloca un Map en auth.getDetails() (ver JwtAuthFilter);
++        // no usamos Spring's JwtAuthenticationToken/oauth2-resource-server aquí.
+         Object details = auth != null ? auth.getDetails() : null;
+         if (details instanceof Map<?, ?> map) {
+             Map<String, Object> out = new HashMap<>();

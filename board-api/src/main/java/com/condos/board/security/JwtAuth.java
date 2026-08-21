@@ -1,5 +1,8 @@
 package com.condos.board.security;
 
+import com.condos.board.repository.BoardRepository;
+import com.condos.board.repository.TaskRepository;
+import com.condos.board.repository.UnitRepository;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 import org.springframework.stereotype.Component;
@@ -8,6 +11,16 @@ import java.util.*;
 
 @Component("jwtAuth")
 public class JwtAuth {
+
+    private final BoardRepository boards;
+    private final TaskRepository tasks;
+    private final UnitRepository units;
+
+    public JwtAuth(BoardRepository boards, TaskRepository tasks, UnitRepository units) {
+        this.boards = boards;
+        this.tasks = tasks;
+        this.units = units;
+    }
 
     @SuppressWarnings("unchecked")
     private Map<String, Object> claims(Authentication auth) {
@@ -67,5 +80,29 @@ public class JwtAuth {
             }
         }
         return false;
+    }
+
+    /** ¿Tiene alguno de los roles requeridos en el org dueño de este board? */
+    public boolean hasAccessToBoard(Authentication auth, String boardId, Collection<String> rolesReq) {
+        if (boardId == null) return false;
+        var board = boards.findById(boardId).orElse(null);
+        if (board == null) return false;
+        return hasRoleInOrg(auth, board.orgId, rolesReq);
+    }
+
+    /** ¿Tiene alguno de los roles requeridos en el org dueño del board al que pertenece esta task? */
+    public boolean hasAccessToTask(Authentication auth, String taskId, Collection<String> rolesReq) {
+        if (taskId == null) return false;
+        var task = tasks.findById(taskId).orElse(null);
+        if (task == null) return false;
+        return hasRoleInOrg(auth, task.getOrgId(), rolesReq);
+    }
+
+    /** ¿Tiene alguno de los roles requeridos en el org dueño de la unidad? */
+    public boolean hasAccessToUnit(Authentication auth, String unitId, Collection<String> rolesReq) {
+        if (unitId == null) return false;
+        var unit = units.findById(unitId).orElse(null);
+        if (unit == null) return false;
+        return hasRoleInOrg(auth, unit.getOrgId(), rolesReq);
     }
 }

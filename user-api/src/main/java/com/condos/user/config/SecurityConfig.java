@@ -6,7 +6,9 @@ import io.jsonwebtoken.Jws;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
@@ -38,8 +40,10 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http, JwtService jwt) throws Exception {
         http.csrf(csrf -> csrf.disable());
+        http.cors(Customizer.withDefaults());
 
         http.authorizeHttpRequests(auth -> auth
+                .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                 .requestMatchers("/actuator/health").permitAll()   // healthcheck de Docker (igual que las otras APIs)
                 .requestMatchers("/internal/**").permitAll()
                 .requestMatchers("/condos/api/user/internal/**").permitAll()// libre para auth-api

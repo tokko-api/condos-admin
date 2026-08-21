@@ -1,0 +1,41 @@
+http:
+  routers:
+    # ====== Routers SOLO para desarrollo local ======
+    # Los routers de traefik_dynamic.yml exigen Host(api.condosadmin.site) y
+    # entryPoints websecure (443, TLS con Let's Encrypt), que no existen en local.
+    # Estos duplican las mismas rutas pero matcheando localhost por el
+    # entrypoint "web" (80), sin TLS. No se usan en producción.
+    r-auth-local:
+      rule: "Host(`localhost`) && PathPrefix(`/condos/api/auth`)"
+      service: s-auth
+      entryPoints: ["web"]
+      middlewares: ["cors-chain"]
+
+    r-tenant-local:
+      rule: "Host(`localhost`) && (PathPrefix(`/condos/api/tenant`) || PathPrefix(`/condos/api/admin/tenant`))"
+      service: s-tenant
+      entryPoints: ["web"]
+      middlewares: ["cors-chain"]
+
+    r-user-local:
+      rule: "Host(`localhost`) && (PathPrefix(`/condos/api/user`) || PathPrefix(`/condos/api/admin/user`))"
+      service: s-user
+      entryPoints: ["web"]
+      middlewares: ["cors-chain"]
+
+    r-user-internal-local:
+      rule: "Host(`localhost`) && PathPrefix(`/internal/users`)"
+      service: s-user
+      entryPoints: ["web"]
+
+    r-board-local:
+      rule: "Host(`localhost`) && (PathPrefix(`/condos/api/board`) || PathPrefix(`/condos/api/files`))"
+      service: s-board
+      entryPoints: ["web"]
+      middlewares: ["cors-chain"]
+
+    r-billing-local:
+      rule: "Host(`localhost`) && PathPrefix(`/condos/api/billing`)"
+      service: s-billing
+      entryPoints: ["web"]
+      middlewares: ["cors-chain"]

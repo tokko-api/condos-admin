@@ -1,4 +1,4 @@
-package com.condos.auth.config;
+package com.condos.shared.web;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -9,6 +9,13 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 import java.util.Arrays;
 import java.util.List;
 
+/**
+ * CORS compartido para todos los microservicios (auth-api, tenant-api, user-api, board-api, ...).
+ * Antes solo auth-api tenía esto definido localmente; se centraliza aquí para que
+ * cualquier servicio nuevo (p. ej. billing-api) lo herede sin duplicar código,
+ * y para que el resto de servicios (tenant-api, user-api, board-api) también
+ * acepten llamadas desde el frontend web (Expo en localhost:8081, condosadmin.site).
+ */
 @Configuration
 public class CorsConfig {
 
@@ -16,7 +23,6 @@ public class CorsConfig {
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration config = new CorsConfiguration();
 
-        // 🔥 Agrega todos los orígenes que deben poder llamar auth-api
         config.setAllowedOrigins(List.of(
                 "http://localhost:3000",
                 "http://localhost:8081",

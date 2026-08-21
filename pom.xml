@@ -16,7 +16,8 @@
         <module>tenant-api</module>
         <module>user-api</module>
         <module>board-api</module>
-        <!-- luego: tenant-api, user-api, board-api, task-api, etc. -->
+        <module>billing-api</module>
+        <!-- luego: task-api, etc. -->
     </modules>
 
     <properties>

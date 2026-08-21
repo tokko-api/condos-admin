@@ -80,6 +80,14 @@ http:
       tls:
         certResolver: le
 
+    r-billing:
+      rule: "Host(`api.condosadmin.site`) && PathPrefix(`/condos/api/billing`)"
+      service: s-billing
+      entryPoints: ["websecure"]
+      middlewares: ["cors-chain"]
+      tls:
+        certResolver: le
+
     r-auth-swagger:
       rule: "Host(`api.condosadmin.site`) && (PathPrefix(`/condos/api/auth/swagger-ui`) || PathPrefix(`/condos/api/auth/v3/api-docs`))"
       service: s-auth
@@ -124,6 +132,10 @@ http:
       loadBalancer:
         servers:
           - url: "http://board-api:8080"
+    s-billing:
+      loadBalancer:
+        servers:
+          - url: "http://billing-api:8080"
     # s-minio: definido pero sin router - MinIO NO se expone directo a internet.
     # Los archivos se sirven vía board-api (/condos/api/files/**), que valida JWT
     # antes de leer/escribir en MinIO internamente (http://minio:9000).

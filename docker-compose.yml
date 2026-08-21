@@ -199,6 +199,32 @@ services:
       minio:
         condition: service_healthy
 
+  billing-api:
+    build:
+      context: .
+      dockerfile: billing-api/Dockerfile
+    container_name: ${PROJECT_NAME:-condos}-billing-api
+    restart: unless-stopped
+    environment:
+      SPRING_DATA_MONGODB_URI: ${SPRING_DATA_MONGODB_URI:?SPRING_DATA_MONGODB_URI is required}
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-dev}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
+      JWT_EXPIRES_MINUTES: ${JWT_EXPIRES_MINUTES:-240}
+      BOARD_API_URL: http://board-api:8080/condos/api/board
+    networks:
+      - default
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    depends_on:
+      mongo:
+        condition: service_healthy
+      board-api:
+        condition: service_healthy
+
   # ===========================================
   # NOTA: notify-api NO se incluye aquí.
   # Su código fuente es una copia duplicada de auth-api
