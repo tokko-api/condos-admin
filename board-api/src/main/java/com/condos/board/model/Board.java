@@ -12,6 +12,11 @@ public class Board {
     public String orgId;
     public String name;
     public String description;
+
+    // Supervisor asignado al condominio/colonia (referencia libre a user-api, sin FK)
+    public String supervisorUserId;
+    public String supervisorName; // denormalizado para mostrar sin llamar a user-api
+
     public BoardStatus status = BoardStatus.ACTIVE;
     public Instant createdAt = Instant.now();
     public Instant updatedAt = Instant.now();

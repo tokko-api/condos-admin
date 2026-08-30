@@ -19,11 +19,13 @@ public class BoardServiceImpl implements BoardService {
     private final BoardRepository repo;
 
     @Override
-    public Board create(String orgId, String name, String description) {
+    public Board create(String orgId, String name, String description, String supervisorUserId, String supervisorName) {
         var b = new Board();
         b.orgId = orgId;
         b.name = name;
         b.description = description;
+        b.supervisorUserId = StringUtils.hasText(supervisorUserId) ? supervisorUserId : null;
+        b.supervisorName = StringUtils.hasText(supervisorName) ? supervisorName : null;
         b.status = BoardStatus.ACTIVE;
         b.createdAt = Instant.now();
         b.updatedAt = Instant.now();
@@ -36,10 +38,15 @@ public class BoardServiceImpl implements BoardService {
     }
 
     @Override
-    public Board update(String id, String name, String description) {
+    public Board update(String id, String name, String description, String supervisorUserId, String supervisorName) {
         var b = repo.findById(id).orElseThrow(() -> notFound(id));
         if (name != null) b.name = name;
         if (description != null) b.description = description;
+        // supervisorUserId viaja siempre desde el frontend en el update ("" = quitar supervisor)
+        if (supervisorUserId != null) {
+            b.supervisorUserId = StringUtils.hasText(supervisorUserId) ? supervisorUserId : null;
+            b.supervisorName = StringUtils.hasText(supervisorUserId) ? supervisorName : null;
+        }
         b.updatedAt = Instant.now();
         return repo.save(b);
     }

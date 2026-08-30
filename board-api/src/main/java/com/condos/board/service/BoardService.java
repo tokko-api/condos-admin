@@ -7,9 +7,9 @@ import org.springframework.data.domain.Sort;
 import java.util.Optional;
 
 public interface BoardService {
-    Board create(String orgId, String name, String description);
+    Board create(String orgId, String name, String description, String supervisorUserId, String supervisorName);
     Optional<Board> get(String id);
-    Board update(String id, String name, String description);
+    Board update(String id, String name, String description, String supervisorUserId, String supervisorName);
     Board archive(String id);
     Board activate(String id);
 

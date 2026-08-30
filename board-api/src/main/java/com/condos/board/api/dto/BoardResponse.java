@@ -10,6 +10,8 @@ public record BoardResponse(
         String name,
         String orgId,
         String description,
+        String supervisorUserId,
+        String supervisorName,
         Instant createdAt,
         Instant updatedAt,
         BoardStatus status
@@ -20,6 +22,8 @@ public record BoardResponse(
                 b.name,
                 b.orgId,
                 b.description,
+                b.supervisorUserId,
+                b.supervisorName,
                 b.createdAt,
                 b.updatedAt,
                 b.status

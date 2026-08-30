@@ -31,7 +31,7 @@ public class BoardController {
         @jwtAuth.hasRoleInOrg(authentication, #req.orgId, {'ADMINISTRADOR','SUPERVISOR'})
     """)
     public BoardResponse create(@Valid @RequestBody CreateBoardRequest req) {
-        var b = service.create(req.orgId(), req.name(), req.description());
+        var b = service.create(req.orgId(), req.name(), req.description(), req.supervisorUserId(), req.supervisorName());
         return BoardResponse.from(b);
     }
 
@@ -74,7 +74,7 @@ public class BoardController {
         @jwtAuth.hasAccessToBoard(authentication, #id, {'ADMINISTRADOR','SUPERVISOR'})
     """)
     public BoardResponse update(@PathVariable String id, @Valid @RequestBody UpdateBoardRequest req) {
-        var b = service.update(id, req.name(), req.description());
+        var b = service.update(id, req.name(), req.description(), req.supervisorUserId(), req.supervisorName());
         return BoardResponse.from(b);
     }
 

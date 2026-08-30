@@ -16,4 +16,6 @@ public interface ChargeRepository extends MongoRepository<Charge, String> {
     Page<Charge> findByBoardIdAndStatus(String boardId, ChargeStatus status, Pageable pageable);
 
     Optional<Charge> findByUnitIdAndFeeScheduleIdAndPeriod(String unitId, String feeScheduleId, String period);
+
+    java.util.List<Charge> findByOrgIdAndPeriod(String orgId, String period);
 }
