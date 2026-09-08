@@ -30,11 +30,20 @@ public class Task {
     private Instant dueDate;        // ISO yyyy-MM-dd (string simple)
     private TaskStatus status;
 
+    /**
+     * Quién reportó esta incidencia (id del usuario autenticado que la creó,
+     * lo asigna el servidor, nunca el cliente). Permite que un condómino o
+     * un operativo consulten "mis incidencias reportadas" aunque no sean el
+     * assigneeId.
+     */
+    @Indexed
+    private String reportedBy;
+
     private Instant createdAt;
     private Instant updatedAt;
 
     public static Task newTask(String orgId, String boardId, String title, String description,
-                               String assigneeId, Instant dueDate) {
+                               String assigneeId, Instant dueDate, String reportedBy) {
         Instant now = Instant.now();
 
         return Task.builder()
@@ -44,6 +53,7 @@ public class Task {
                 .description(description)
                 .assigneeId(assigneeId)
                 .dueDate(dueDate)
+                .reportedBy(reportedBy)
                 .status(TaskStatus.OPEN)
                 .createdAt(now)
                 .updatedAt(now)

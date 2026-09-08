@@ -13,6 +13,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -35,7 +36,7 @@ public class UnitController {
                                 @Valid @RequestBody CreateUnitRequest req) {
         var board = boards.get(boardId).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
         var u = units.create(board.orgId, boardId, req.identifier(), req.ownerName(),
-                req.residentUserId(), req.coefficient());
+                req.residentUserId(), req.coefficient(), Boolean.TRUE.equals(req.committeeMember()));
         return UnitResponse.from(u);
     }
 
@@ -60,11 +61,18 @@ public class UnitController {
     @GetMapping("/units/{id}")
     @PreAuthorize("""
         @jwtAuth.isSuperadmin(authentication) or
-        @jwtAuth.hasAccessToUnit(authentication, #id, {'ADMINISTRADOR','SUPERVISOR','OPERATIVO'})
+        @jwtAuth.hasAccessToUnit(authentication, #id, {'ADMINISTRADOR','SUPERVISOR','OPERATIVO'}) or
+        @jwtAuth.isResidentOfUnit(authentication, #id)
     """)
     public UnitResponse get(@PathVariable String id) {
         var u = units.get(id).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
         return UnitResponse.from(u);
+    }
+
+    // ======== MY UNITS (condomino) ========
+    @GetMapping("/units/mine")
+    public java.util.List<UnitResponse> mine(Authentication authentication) {
+        return units.listMine(authentication.getName()).stream().map(UnitResponse::from).toList();
     }
 
     // ======== UPDATE ========
@@ -74,7 +82,8 @@ public class UnitController {
         @jwtAuth.hasAccessToUnit(authentication, #id, {'ADMINISTRADOR','SUPERVISOR'})
     """)
     public UnitResponse update(@PathVariable String id, @Valid @RequestBody UpdateUnitRequest req) {
-        var u = units.update(id, req.identifier(), req.ownerName(), req.residentUserId(), req.coefficient());
+        var u = units.update(id, req.identifier(), req.ownerName(), req.residentUserId(), req.coefficient(),
+                req.committeeMember());
         return UnitResponse.from(u);
     }
 

@@ -43,13 +43,37 @@ public class BoardApiClientImpl implements BoardApiClient {
             List<UnitRef> units = new ArrayList<>();
             if (content.isArray()) {
                 for (JsonNode n : content) {
-                    units.add(new UnitRef(n.get("id").asText(), n.get("identifier").asText()));
+                    units.add(new UnitRef(
+                            n.get("id").asText(),
+                            n.get("identifier").asText(),
+                            n.hasNonNull("residentUserId") ? n.get("residentUserId").asText() : null));
                 }
             }
             return units;
         } catch (Exception e) {
             throw new ResponseStatusException(HttpStatus.BAD_GATEWAY,
                     "No se pudo obtener las unidades de board-api para boardId=" + boardId + ": " + e.getMessage());
+        }
+    }
+
+    @Override
+    public UnitRef getUnit(String unitId, String bearerToken) {
+        String url = UriComponentsBuilder.fromHttpUrl(boardApiBaseUrl)
+                .pathSegment("units", unitId)
+                .toUriString();
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setBearerAuth(bearerToken);
+
+        try {
+            var res = rest.exchange(url, HttpMethod.GET, new HttpEntity<>(headers), String.class);
+            JsonNode n = mapper.readTree(res.getBody());
+            return new UnitRef(
+                    n.get("id").asText(),
+                    n.get("identifier").asText(),
+                    n.hasNonNull("residentUserId") ? n.get("residentUserId").asText() : null);
+        } catch (Exception e) {
+            return null;
         }
     }
 }

@@ -35,6 +35,14 @@ public class Unit {
     private String residentUserId;  // opcional: si el residente tiene cuenta en el sistema (user-api)
     private BigDecimal coefficient; // % de indiviso, opcional (prorrateo futuro de cuotas/voto)
 
+    /**
+     * ¿El residente de esta unidad es parte del comité de vigilancia de la
+     * colonia? Solo tiene sentido si residentUserId no es null. Habilita, en
+     * el frontend del condómino, las secciones de Aprobaciones y Actas.
+     */
+    @Builder.Default
+    private boolean committeeMember = false;
+
     private UnitStatus status;
 
     private Instant createdAt;
@@ -42,6 +50,11 @@ public class Unit {
 
     public static Unit newUnit(String orgId, String boardId, String identifier, String ownerName,
                                 String residentUserId, BigDecimal coefficient) {
+        return newUnit(orgId, boardId, identifier, ownerName, residentUserId, coefficient, false);
+    }
+
+    public static Unit newUnit(String orgId, String boardId, String identifier, String ownerName,
+                                String residentUserId, BigDecimal coefficient, boolean committeeMember) {
         Instant now = Instant.now();
         return Unit.builder()
                 .orgId(orgId)
@@ -50,6 +63,7 @@ public class Unit {
                 .ownerName(ownerName)
                 .residentUserId(residentUserId)
                 .coefficient(coefficient)
+                .committeeMember(committeeMember)
                 .status(UnitStatus.ACTIVE)
                 .createdAt(now)
                 .updatedAt(now)

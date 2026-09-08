@@ -14,7 +14,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
-import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -32,13 +32,16 @@ public class TaskController {
     @ResponseStatus(HttpStatus.CREATED)
     @PreAuthorize("""
         @jwtAuth.isSuperadmin(authentication) or
-        @jwtAuth.hasAccessToBoard(authentication, #boardId, {'ADMINISTRADOR','SUPERVISOR'})
+        @jwtAuth.hasAccessToBoard(authentication, #boardId, {'ADMINISTRADOR','SUPERVISOR','OPERATIVO'}) or
+        @jwtAuth.isResidentOfBoard(authentication, #boardId)
     """)
     public TaskResponse create(@PathVariable String boardId,
-                               @Valid @RequestBody CreateTaskRequest req) {
+                               @Valid @RequestBody CreateTaskRequest req,
+                               Authentication authentication) {
         // obtenemos orgId del board para guardar junto con la tarea
         var board = boards.get(boardId).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
-        var t = tasks.create(board.orgId, boardId, req.title(), req.description(), req.assigneeId(), req.dueDate());
+        var t = tasks.create(board.orgId, boardId, req.title(), req.description(), req.assigneeId(), req.dueDate(),
+                authentication.getName());
         return TaskResponse.from(t);
     }
 
@@ -87,7 +90,8 @@ public class TaskController {
     @PatchMapping("/tasks/{id}/status")
     @PreAuthorize("""
         @jwtAuth.isSuperadmin(authentication) or
-        @jwtAuth.hasAccessToTask(authentication, #id, {'ADMINISTRADOR','SUPERVISOR'})
+        @jwtAuth.hasAccessToTask(authentication, #id, {'ADMINISTRADOR','SUPERVISOR'}) or
+        @jwtAuth.isAssignedToTask(authentication, #id)
     """)
     public TaskResponse changeStatus(@PathVariable String id, @RequestBody StatusReq req) {
         var t = tasks.changeStatus(id, req.status());
@@ -115,22 +119,38 @@ public class TaskController {
     @GetMapping("/tasks") // <-- NUEVO
     @PreAuthorize("""
     @jwtAuth.hasRoleInOrg(authentication, #orgId,
-      {'OPERATIVO','SUPERVISOR','ADMINISTRADOR','SUPERADMIN'})
+      {'OPERATIVO','SUPERVISOR','ADMINISTRADOR','SUPERADMIN','CONDOMINO'})
 """)
     public Page<TaskResponse> listByAssignee(
             @RequestParam String orgId,
-            @RequestParam(defaultValue = "me") String assigneeId,
+            @RequestParam(required = false) String assigneeId,
+            @RequestParam(required = false) String reportedBy,
             @RequestParam(required = false) TaskStatus status,
             @RequestParam(required = false, defaultValue = "false") boolean overdue,
             @RequestParam(required = false) String q,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "100") int size,
             @RequestParam(defaultValue = "dueDate") String sortBy,
-            @RequestParam(defaultValue = "ASC") Sort.Direction dir
+            @RequestParam(defaultValue = "ASC") Sort.Direction dir,
+            Authentication authentication
     ) {
+        // "mis incidencias reportadas" (condómino u operativo): siempre self-scoped,
+        // sin importar el rol — nadie puede consultar lo reportado por alguien más.
+        if (reportedBy != null) {
+            var result = tasks.listByReporter(orgId, authentication.getName(), status, page, size, sortBy, dir);
+            return result.map(TaskResponse::from);
+        }
+
+        // "mis tareas asignadas" (o las de otro usuario): solo personal interno.
+        boolean isStaff = jwtAuth.isSuperadmin(authentication)
+                || jwtAuth.hasRoleInOrg(authentication, orgId, java.util.Set.of("OPERATIVO", "SUPERVISOR", "ADMINISTRADOR"));
+        if (!isStaff) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "un condómino solo puede consultar sus incidencias reportadas (reportedBy=me)");
+        }
+
         // "me" -> id del usuario autenticado
-        String effAssignee = "me".equalsIgnoreCase(assigneeId)
-                ? SecurityContextHolder.getContext().getAuthentication().getName()                    // implementa userId() en JwtAuth, lee el sub del JWT
+        String effAssignee = assigneeId == null || "me".equalsIgnoreCase(assigneeId)
+                ? authentication.getName()
                 : assigneeId;
 
         var result = tasks.listByAssignee(orgId, effAssignee, status, overdue, q, page, size, sortBy, dir);

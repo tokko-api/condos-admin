@@ -6,9 +6,13 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.mongodb.repository.MongoRepository;
 
+import java.util.List;
+
 public interface UnitRepository extends MongoRepository<Unit, String> {
 
     Page<Unit> findByBoardId(String boardId, Pageable pageable);
+
+    List<Unit> findByResidentUserId(String residentUserId);
 
     Page<Unit> findByBoardIdAndStatus(String boardId, UnitStatus status, Pageable pageable);
 

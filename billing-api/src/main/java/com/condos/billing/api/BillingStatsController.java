@@ -1,6 +1,8 @@
 package com.condos.billing.api;
 
 import com.condos.billing.api.dto.BoardCollectionRes;
+import com.condos.billing.api.dto.BoardExpenseRes;
+import com.condos.billing.api.dto.ExpenseCategoryBreakdownRes;
 import com.condos.billing.stats.BillingStatsService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -30,5 +32,33 @@ public class BillingStatsController {
             @RequestParam String orgId,
             @RequestParam(required = false) String period) {
         return stats.collectionByBoard(orgId, period);
+    }
+
+    /**
+     * Egresos del mes agrupados por condominio (boardId). Mismo formato de
+     * `period` que collection-by-board.
+     */
+    @GetMapping("/expenses-by-board")
+    @PreAuthorize("""
+        @jwtAuth.isSuperadmin(authentication) or
+        @jwtAuth.hasRoleInOrg(authentication, #orgId, {'ADMINISTRADOR','SUPERVISOR'})
+    """)
+    public List<BoardExpenseRes> expensesByBoard(
+            @RequestParam String orgId,
+            @RequestParam(required = false) String period) {
+        return stats.expensesByBoard(orgId, period);
+    }
+
+    /** Desglose de egresos por categoría para una colonia (boardId) en un periodo. */
+    @GetMapping("/expenses-by-category")
+    @PreAuthorize("""
+        @jwtAuth.isSuperadmin(authentication) or
+        @jwtAuth.hasRoleInOrg(authentication, #orgId, {'ADMINISTRADOR','SUPERVISOR'})
+    """)
+    public List<ExpenseCategoryBreakdownRes> expensesByCategory(
+            @RequestParam String orgId,
+            @RequestParam(required = false) String boardId,
+            @RequestParam(required = false) String period) {
+        return stats.expensesByCategory(orgId, boardId, period);
     }
 }

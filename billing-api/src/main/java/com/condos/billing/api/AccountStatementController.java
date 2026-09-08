@@ -23,7 +23,8 @@ public class AccountStatementController {
     @GetMapping("/account-statement")
     @PreAuthorize("""
         @jwtAuth.isSuperadmin(authentication) or
-        @jwtAuth.hasRoleInOrg(authentication, #orgId, {'ADMINISTRADOR','SUPERVISOR','OPERATIVO'})
+        @jwtAuth.hasRoleInOrg(authentication, #orgId, {'ADMINISTRADOR','SUPERVISOR','OPERATIVO'}) or
+        @jwtAuth.isOwnUnit(authentication, #unitId)
     """)
     public AccountStatementResponse forUnit(@RequestParam String orgId, @RequestParam String unitId) {
         return statements.forUnit(unitId);

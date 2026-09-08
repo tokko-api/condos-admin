@@ -16,6 +16,7 @@ public record ChargeResponse(
         ChargeType type,
         String concept,
         BigDecimal amount,
+        BigDecimal paidAmount,
         String period,
         Instant dueDate,
         ChargeStatus status,
@@ -26,7 +27,9 @@ public record ChargeResponse(
     public static ChargeResponse from(Charge c) {
         return new ChargeResponse(
                 c.getId(), c.getBoardId(), c.getOrgId(), c.getUnitId(), c.getFeeScheduleId(),
-                c.getType(), c.getConcept(), c.getAmount(), c.getPeriod(), c.getDueDate(), c.getStatus(),
+                c.getType(), c.getConcept(), c.getAmount(),
+                c.getPaidAmount() != null ? c.getPaidAmount() : BigDecimal.ZERO,
+                c.getPeriod(), c.getDueDate(), c.getStatus(),
                 c.getAssemblyRef() != null ? c.getAssemblyRef().getActaNumber() : null,
                 c.getCreatedAt(), c.getUpdatedAt()
         );

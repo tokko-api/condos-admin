@@ -14,6 +14,7 @@ public record UnitResponse(
         String ownerName,
         String residentUserId,
         BigDecimal coefficient,
+        boolean committeeMember,
         UnitStatus status,
         Instant createdAt,
         Instant updatedAt
@@ -22,7 +23,7 @@ public record UnitResponse(
         return new UnitResponse(
                 u.getId(), u.getBoardId(), u.getOrgId(), u.getIdentifier(),
                 u.getOwnerName(), u.getResidentUserId(), u.getCoefficient(),
-                u.getStatus(), u.getCreatedAt(), u.getUpdatedAt()
+                u.isCommitteeMember(), u.getStatus(), u.getCreatedAt(), u.getUpdatedAt()
         );
     }
 }

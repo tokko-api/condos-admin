@@ -40,6 +40,15 @@ public class Charge {
     private Instant dueDate;
     private ChargeStatus status;
 
+    /**
+     * Cuánto se ha aplicado realmente a este cargo a través de pagos
+     * conciliados (ver PaymentServiceImpl.reconcile). Nunca excede
+     * `amount`: lo que sobra de un pago se registra como crédito de la
+     * unidad (UnitCredit) en vez de inflar este campo.
+     */
+    @Builder.Default
+    private BigDecimal paidAmount = BigDecimal.ZERO;
+
     private AssemblyRef assemblyRef; // solo para EXTRAORDINARY
 
     private Instant createdAt;
@@ -60,6 +69,7 @@ public class Charge {
                 .period(period)
                 .dueDate(dueDate)
                 .status(ChargeStatus.PENDING)
+                .paidAmount(BigDecimal.ZERO)
                 .assemblyRef(assemblyRef)
                 .createdAt(now)
                 .updatedAt(now)

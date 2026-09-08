@@ -9,10 +9,11 @@ import java.util.*;
 public class JwtAuth {
 
     private static final Map<String, Integer> RANK = Map.of(
-            "SUPERADMIN", 3,
-            "ADMINISTRADOR", 2,
-            "SUPERVISOR", 1,
-            "OPERATIVO", 0
+            "SUPERADMIN", 4,
+            "ADMINISTRADOR", 3,
+            "SUPERVISOR", 2,
+            "OPERATIVO", 1,
+            "CONDOMINO", 0
     );
 
     public boolean isSuperadmin(Authentication auth) {

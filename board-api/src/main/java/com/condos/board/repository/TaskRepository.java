@@ -20,4 +20,8 @@ public interface TaskRepository extends MongoRepository<Task, String> {
     Page<Task> findByOrgIdAndAssigneeId(String orgId, String assigneeId, Pageable pageable);
     Page<Task> findByOrgIdAndAssigneeIdAndStatus(String orgId, String assigneeId,
                                                  TaskStatus status, Pageable pageable);
+
+    Page<Task> findByOrgIdAndReportedBy(String orgId, String reportedBy, Pageable pageable);
+    Page<Task> findByOrgIdAndReportedByAndStatus(String orgId, String reportedBy,
+                                                 TaskStatus status, Pageable pageable);
 }

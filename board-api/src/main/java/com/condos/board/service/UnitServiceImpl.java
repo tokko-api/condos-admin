@@ -15,6 +15,7 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 
 @Service
@@ -25,8 +26,8 @@ public class UnitServiceImpl implements UnitService {
 
     @Override
     public Unit create(String orgId, String boardId, String identifier, String ownerName,
-                        String residentUserId, BigDecimal coefficient) {
-        Unit u = Unit.newUnit(orgId, boardId, identifier, ownerName, residentUserId, coefficient);
+                        String residentUserId, BigDecimal coefficient, boolean committeeMember) {
+        Unit u = Unit.newUnit(orgId, boardId, identifier, ownerName, residentUserId, coefficient, committeeMember);
         try {
             return repo.save(u);
         } catch (DuplicateKeyException ex) {
@@ -41,13 +42,20 @@ public class UnitServiceImpl implements UnitService {
     }
 
     @Override
-    public Unit update(String id, String identifier, String ownerName, String residentUserId, BigDecimal coefficient) {
+    public List<Unit> listMine(String residentUserId) {
+        return repo.findByResidentUserId(residentUserId);
+    }
+
+    @Override
+    public Unit update(String id, String identifier, String ownerName, String residentUserId, BigDecimal coefficient,
+                        Boolean committeeMember) {
         Unit u = repo.findById(id).orElseThrow(() -> notFound(id));
 
         if (StringUtils.hasText(identifier)) u.setIdentifier(identifier);
         if (ownerName != null) u.setOwnerName(ownerName);
         if (residentUserId != null) u.setResidentUserId(residentUserId);
         if (coefficient != null) u.setCoefficient(coefficient);
+        if (committeeMember != null) u.setCommitteeMember(committeeMember);
 
         u.setUpdatedAt(Instant.now());
         try {

@@ -16,7 +16,10 @@ import java.util.List;
  * servicio en vez de reenviar el del usuario.
  */
 public interface BoardApiClient {
-    record UnitRef(String id, String identifier) {}
+    record UnitRef(String id, String identifier, String residentUserId) {}
 
     List<UnitRef> listActiveUnitIds(String boardId, String bearerToken);
+
+    /** Resuelve una unidad puntual (usado para validar ownership de un condomino). */
+    UnitRef getUnit(String unitId, String bearerToken);
 }

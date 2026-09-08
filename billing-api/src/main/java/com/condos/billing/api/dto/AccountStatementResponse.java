@@ -10,6 +10,7 @@ public record AccountStatementResponse(
         BigDecimal totalCharged,
         BigDecimal totalPaid,
         BigDecimal balance, // totalCharged - totalPaid
+        BigDecimal creditBalance, // saldo a favor explícito (excedentes de pagos, ver UnitCredit)
         List<ChargeResponse> charges,
         List<PaymentResponse> payments
 ) {}

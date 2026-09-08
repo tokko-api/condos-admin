@@ -1,6 +1,9 @@
 package com.condos.board.security;
 
+import com.condos.board.repository.AmenityRepository;
+import com.condos.board.repository.AnnouncementRepository;
 import com.condos.board.repository.BoardRepository;
+import com.condos.board.repository.ReservationRepository;
 import com.condos.board.repository.TaskRepository;
 import com.condos.board.repository.UnitRepository;
 import org.springframework.security.core.Authentication;
@@ -15,11 +18,19 @@ public class JwtAuth {
     private final BoardRepository boards;
     private final TaskRepository tasks;
     private final UnitRepository units;
+    private final AmenityRepository amenities;
+    private final ReservationRepository reservations;
+    private final AnnouncementRepository announcements;
 
-    public JwtAuth(BoardRepository boards, TaskRepository tasks, UnitRepository units) {
+    public JwtAuth(BoardRepository boards, TaskRepository tasks, UnitRepository units,
+                    AmenityRepository amenities, ReservationRepository reservations,
+                    AnnouncementRepository announcements) {
         this.boards = boards;
         this.tasks = tasks;
         this.units = units;
+        this.amenities = amenities;
+        this.reservations = reservations;
+        this.announcements = announcements;
     }
 
     @SuppressWarnings("unchecked")
@@ -104,5 +115,73 @@ public class JwtAuth {
         var unit = units.findById(unitId).orElse(null);
         if (unit == null) return false;
         return hasRoleInOrg(auth, unit.getOrgId(), rolesReq);
+    }
+
+    /** Resident (condomino) check: is this the unit's assigned resident? */
+    public boolean isResidentOfUnit(Authentication auth, String unitId) {
+        if (unitId == null || auth == null || !auth.isAuthenticated()) return false;
+        var unit = units.findById(unitId).orElse(null);
+        if (unit == null || unit.getResidentUserId() == null) return false;
+        return unit.getResidentUserId().equals(auth.getName());
+    }
+
+    /** ¿Es residente (condomino) de alguna unidad de esta colonia? Le permite reportar incidencias ahí. */
+    public boolean isResidentOfBoard(Authentication auth, String boardId) {
+        if (boardId == null || auth == null || !auth.isAuthenticated()) return false;
+        return units.findByResidentUserId(auth.getName()).stream()
+                .anyMatch(u -> boardId.equals(u.getBoardId()));
+    }
+
+    /** ¿Es el operativo asignado a esta tarea/incidencia? Le permite cambiar su propio status. */
+    public boolean isAssignedToTask(Authentication auth, String taskId) {
+        if (taskId == null || auth == null || !auth.isAuthenticated()) return false;
+        var task = tasks.findById(taskId).orElse(null);
+        if (task == null || task.getAssigneeId() == null) return false;
+        return task.getAssigneeId().equals(auth.getName());
+    }
+
+    /** ¿Tiene alguno de los roles requeridos en el org dueño de esta amenidad? */
+    public boolean hasAccessToAmenity(Authentication auth, String amenityId, Collection<String> rolesReq) {
+        if (amenityId == null) return false;
+        var amenity = amenities.findById(amenityId).orElse(null);
+        if (amenity == null) return false;
+        return hasRoleInOrg(auth, amenity.getOrgId(), rolesReq);
+    }
+
+    /**
+     * ¿Es residente de la colonia dueña de esta amenidad? A diferencia de
+     * hasAccessToAmenity con rol CONDOMINO (que solo mira el org y dejaría
+     * ver amenidades de OTRA colonia de la misma empresa), esto valida la
+     * colonia (boardId) exacta.
+     */
+    public boolean isResidentOfAmenityBoard(Authentication auth, String amenityId) {
+        if (amenityId == null) return false;
+        var amenity = amenities.findById(amenityId).orElse(null);
+        if (amenity == null) return false;
+        return isResidentOfBoard(auth, amenity.getBoardId());
+    }
+
+    /** ¿Tiene alguno de los roles requeridos en el org dueño de esta reservación? */
+    public boolean hasAccessToReservation(Authentication auth, String reservationId, Collection<String> rolesReq) {
+        if (reservationId == null) return false;
+        var reservation = reservations.findById(reservationId).orElse(null);
+        if (reservation == null) return false;
+        return hasRoleInOrg(auth, reservation.getOrgId(), rolesReq);
+    }
+
+    /** ¿Es quien hizo esta reservación? Le permite cancelarla. */
+    public boolean isRequesterOfReservation(Authentication auth, String reservationId) {
+        if (reservationId == null || auth == null || !auth.isAuthenticated()) return false;
+        var reservation = reservations.findById(reservationId).orElse(null);
+        if (reservation == null || reservation.getRequestedBy() == null) return false;
+        return reservation.getRequestedBy().equals(auth.getName());
+    }
+
+    /** ¿Tiene alguno de los roles requeridos en el org dueño de este comunicado? */
+    public boolean hasAccessToAnnouncement(Authentication auth, String announcementId, Collection<String> rolesReq) {
+        if (announcementId == null) return false;
+        var announcement = announcements.findById(announcementId).orElse(null);
+        if (announcement == null) return false;
+        return hasRoleInOrg(auth, announcement.getOrgId(), rolesReq);
     }
 }

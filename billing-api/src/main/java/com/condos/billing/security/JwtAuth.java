@@ -1,8 +1,10 @@
 package com.condos.billing.security;
 
 import com.condos.billing.repository.ChargeRepository;
+import com.condos.billing.repository.ExpenseRepository;
 import com.condos.billing.repository.FeeScheduleRepository;
 import com.condos.billing.repository.PaymentRepository;
+import com.condos.billing.service.BoardApiClient;
 import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Component;
 
@@ -14,11 +16,16 @@ public class JwtAuth {
     private final FeeScheduleRepository schedules;
     private final ChargeRepository charges;
     private final PaymentRepository payments;
+    private final ExpenseRepository expenses;
+    private final BoardApiClient boardApi;
 
-    public JwtAuth(FeeScheduleRepository schedules, ChargeRepository charges, PaymentRepository payments) {
+    public JwtAuth(FeeScheduleRepository schedules, ChargeRepository charges, PaymentRepository payments,
+                    ExpenseRepository expenses, BoardApiClient boardApi) {
         this.schedules = schedules;
         this.charges = charges;
         this.payments = payments;
+        this.expenses = expenses;
+        this.boardApi = boardApi;
     }
 
     @SuppressWarnings("unchecked")
@@ -95,5 +102,28 @@ public class JwtAuth {
         var p = payments.findById(paymentId).orElse(null);
         if (p == null) return false;
         return hasRoleInOrg(auth, p.getOrgId(), rolesReq);
+    }
+
+    /** ¿Tiene alguno de los roles requeridos en el org dueño de este egreso? */
+    public boolean hasAccessToExpense(Authentication auth, String expenseId, Collection<String> rolesReq) {
+        if (expenseId == null) return false;
+        var e = expenses.findById(expenseId).orElse(null);
+        if (e == null) return false;
+        return hasRoleInOrg(auth, e.getOrgId(), rolesReq);
+    }
+
+    /**
+     * ¿Es el condomino/residente asignado a esta unidad? Resuelve la unidad en
+     * board-api reenviando el token del propio usuario (misma limitación de
+     * auth servicio-a-servicio documentada en BoardApiClient).
+     */
+    public boolean isOwnUnit(Authentication auth, String unitId) {
+        if (unitId == null || auth == null || !auth.isAuthenticated()) return false;
+        var c = claims(auth);
+        Object token = c.get("token");
+        if (!(token instanceof String bearerToken) || bearerToken.isBlank()) return false;
+
+        var unit = boardApi.getUnit(unitId, bearerToken);
+        return unit != null && auth.getName().equals(unit.residentUserId());
     }
 }

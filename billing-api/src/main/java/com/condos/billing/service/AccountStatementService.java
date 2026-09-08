@@ -22,6 +22,7 @@ public class AccountStatementService {
 
     private final ChargeRepository chargeRepo;
     private final PaymentRepository paymentRepo;
+    private final CreditService credits;
 
     /** Estado de cuenta on-the-fly de una unidad: agrega charges + payments (RN-PAG-05). */
     public AccountStatementResponse forUnit(String unitId) {
@@ -52,6 +53,7 @@ public class AccountStatementService {
                 totalCharged,
                 totalPaid,
                 totalCharged.subtract(totalPaid),
+                credits.getBalance(unitId),
                 charges.stream().map(ChargeResponse::from).toList(),
                 payments.stream().map(PaymentResponse::from).toList()
         );

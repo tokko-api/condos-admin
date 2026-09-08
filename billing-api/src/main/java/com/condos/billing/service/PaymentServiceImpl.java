@@ -15,6 +15,7 @@ import org.springframework.web.server.ResponseStatusException;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -25,6 +26,7 @@ public class PaymentServiceImpl implements PaymentService {
 
     private final PaymentRepository payments;
     private final ChargeRepository charges;
+    private final CreditService credits;
 
     @Override
     public Payment create(String orgId, String boardId, String unitId, List<String> chargeIds,
@@ -58,18 +60,44 @@ public class PaymentServiceImpl implements PaymentService {
         p.setUpdatedAt(Instant.now());
         payments.save(p);
 
-        // NOTA (simplificación Fase 1): un pago conciliado marca como PAID
-        // todos los cargos que cubre, sin prorratear montos parciales entre
-        // varios cargos. Si en el futuro se necesita pago parcial exacto por
-        // cargo, hay que sumar pagos reconciliados por chargeId y comparar
-        // contra Charge.amount para decidir PARTIALLY_PAID vs PAID.
-        if (approve && p.getChargeIds() != null) {
-            for (String chargeId : p.getChargeIds()) {
-                charges.findById(chargeId).ifPresent(c -> {
-                    c.setStatus(ChargeStatus.PAID);
-                    c.setUpdatedAt(Instant.now());
-                    charges.save(c);
-                });
+        // Un pago conciliado se reparte entre los cargos que cubre (los más
+        // próximos a vencer primero), sin exceder nunca lo que cada cargo
+        // debe. Cada cargo queda PARTIALLY_PAID o PAID según cuánto se le
+        // haya aplicado en total (puede recibir aportes de varios pagos). Lo
+        // que sobra después de cubrir todos los cargos ligados al pago se
+        // guarda como saldo a favor de la unidad (RN-PAG-05 ampliada) en vez
+        // de perderse en un balance negativo sin explicar.
+        if (approve && p.getChargeIds() != null && !p.getChargeIds().isEmpty()) {
+            BigDecimal remaining = p.getAmount() != null ? p.getAmount() : BigDecimal.ZERO;
+
+            List<Charge> linkedCharges = p.getChargeIds().stream()
+                    .map(charges::findById)
+                    .filter(Optional::isPresent)
+                    .map(Optional::get)
+                    .sorted(Comparator.comparing(Charge::getDueDate, Comparator.nullsLast(Comparator.naturalOrder())))
+                    .toList();
+
+            for (Charge c : linkedCharges) {
+                if (remaining.signum() <= 0) break;
+
+                BigDecimal chargeAmount = c.getAmount() != null ? c.getAmount() : BigDecimal.ZERO;
+                BigDecimal already = c.getPaidAmount() != null ? c.getPaidAmount() : BigDecimal.ZERO;
+                BigDecimal due = chargeAmount.subtract(already);
+                if (due.signum() <= 0) continue; // ya estaba cubierto por pagos anteriores
+
+                BigDecimal applied = remaining.min(due);
+                BigDecimal newPaid = already.add(applied);
+
+                c.setPaidAmount(newPaid);
+                c.setStatus(newPaid.compareTo(chargeAmount) >= 0 ? ChargeStatus.PAID : ChargeStatus.PARTIALLY_PAID);
+                c.setUpdatedAt(Instant.now());
+                charges.save(c);
+
+                remaining = remaining.subtract(applied);
+            }
+
+            if (remaining.signum() > 0) {
+                credits.addCredit(p.getOrgId(), p.getBoardId(), p.getUnitId(), remaining);
             }
         }
 

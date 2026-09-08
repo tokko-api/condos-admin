@@ -23,8 +23,8 @@ public class TaskService {
     private final TaskRepository repo;
 
     public Task create(String orgId, String boardId, String title, String description,
-                       String assigneeId, String dueDate) {
-        Task t = Task.newTask(orgId, boardId, title, description, assigneeId, parseDueDate(dueDate));
+                       String assigneeId, String dueDate, String reportedBy) {
+        Task t = Task.newTask(orgId, boardId, title, description, assigneeId, parseDueDate(dueDate), reportedBy);
         return repo.save(t);
     }
 
@@ -105,5 +105,13 @@ public class TaskService {
                 .toList();
 
         return new PageImpl<>(filtered, pageable, filtered.size());
+    }
+
+    public Page<Task> listByReporter(String orgId, String reportedBy, TaskStatus status,
+                                      int page, int size, String sortBy, Sort.Direction dir) {
+        var pageable = PageRequest.of(page, size, Sort.by(dir, sortBy));
+        return status != null
+                ? repo.findByOrgIdAndReportedByAndStatus(orgId, reportedBy, status, pageable)
+                : repo.findByOrgIdAndReportedBy(orgId, reportedBy, pageable);
     }
 }

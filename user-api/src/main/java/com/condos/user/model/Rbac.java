@@ -16,7 +16,7 @@ public class Rbac {
         this.jwtAuth = jwtAuth;
     }
     private static final Map<String,Integer> RANK = Map.of(
-            "SUPERADMIN", 3, "ADMINISTRADOR", 2, "SUPERVISOR", 1, "OPERATIVO", 0
+            "SUPERADMIN", 4, "ADMINISTRADOR", 3, "SUPERVISOR", 2, "OPERATIVO", 1, "CONDOMINO", 0
     );
 
     public boolean canManage(String orgId, String targetRole, Authentication auth) {

@@ -76,6 +76,9 @@ public class JwtAuthFilter extends OncePerRequestFilter {
                 Map<String, Object> details = new HashMap<>();
                 details.put("orgs", orgsForDetails);
                 details.put("roles", rolesRoot);
+                // Se conserva el token crudo para poder reenviarlo a board-api al resolver
+                // el ownership de una unidad (ver JwtAuth.isOwnUnit / BoardApiClient).
+                details.put("token", header.substring(7));
                 auth.setDetails(details);
                 SecurityContextHolder.getContext().setAuthentication(auth);
             } catch (JwtException ignored) {

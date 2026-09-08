@@ -16,6 +16,7 @@ public record TaskResponse(
         String assigneeId,
         String dueDate,
         TaskStatus status,
+        String reportedBy,
         Instant createdAt,
         Instant updatedAt
 ) {
@@ -28,7 +29,7 @@ public record TaskResponse(
         return new TaskResponse(
                 t.getId(), t.getBoardId(), t.getOrgId(), t.getTitle(),
                 t.getDescription(), t.getAssigneeId(), dueStr,
-                t.getStatus(), t.getCreatedAt(), t.getUpdatedAt()
+                t.getStatus(), t.getReportedBy(), t.getCreatedAt(), t.getUpdatedAt()
         );
     }
 }

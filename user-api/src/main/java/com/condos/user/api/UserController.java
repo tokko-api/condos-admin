@@ -28,7 +28,11 @@ public class UserController {
     @jwtAuth.isSuperadmin(authentication) or
     (
       @jwtAuth.hasRoleInOrg(authentication, #req.orgId, {'ADMINISTRADOR'})
-      and (#req.role.name() == 'SUPERVISOR' or #req.role.name() == 'OPERATIVO')
+      and (#req.role.name() == 'SUPERVISOR' or #req.role.name() == 'OPERATIVO' or #req.role.name() == 'CONDOMINO')
+    ) or
+    (
+      @jwtAuth.hasRoleInOrg(authentication, #req.orgId, {'SUPERVISOR'})
+      and #req.role.name() == 'CONDOMINO'
     )
 """)
     public UserSummary create(org.springframework.security.core.Authentication authentication,
@@ -65,7 +69,8 @@ public class UserController {
                                   @RequestBody ChangeRoleRequest req) {
         // Validate allowed roles
         if (!"SUPERADMIN".equals(req.role()) && !"ADMINISTRADOR".equals(req.role())
-                && !"SUPERVISOR".equals(req.role()) && !"OPERATIVO".equals(req.role())) {
+                && !"SUPERVISOR".equals(req.role()) && !"OPERATIVO".equals(req.role())
+                && !"CONDOMINO".equals(req.role())) {
             throw new ResponseStatusException(
                     HttpStatus.BAD_REQUEST, "invalid role");
         }

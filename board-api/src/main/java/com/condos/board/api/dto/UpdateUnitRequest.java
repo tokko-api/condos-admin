@@ -6,5 +6,6 @@ public record UpdateUnitRequest(
         String identifier,
         String ownerName,
         String residentUserId,
-        BigDecimal coefficient
+        BigDecimal coefficient,
+        Boolean committeeMember
 ) {}
