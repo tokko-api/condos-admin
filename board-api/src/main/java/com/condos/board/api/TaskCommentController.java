@@ -21,7 +21,9 @@ public class TaskCommentController {
     @PostMapping("/attachments/presign")
     @PreAuthorize("""
       @jwtAuth.isSuperadmin(authentication) or
-      @jwtAuth.hasAccessToBoard(authentication, #boardId, {'ADMINISTRADOR','SUPERVISOR','OPERATIVO'})
+      @jwtAuth.hasAccessToBoard(authentication, #boardId, {'ADMINISTRADOR','SUPERVISOR','OPERATIVO'}) or
+      @jwtAuth.isReporterOfTask(authentication, #taskId) or
+      @jwtAuth.isAssignedToTask(authentication, #taskId)
     """)
     public Mono<PresignResponse> presign(@PathVariable String boardId,
                                          @PathVariable String taskId,
@@ -32,7 +34,9 @@ public class TaskCommentController {
     @PostMapping("/attachments/complete")
     @PreAuthorize("""
       @jwtAuth.isSuperadmin(authentication) or
-      @jwtAuth.hasAccessToBoard(authentication, #boardId, {'ADMINISTRADOR','SUPERVISOR','OPERATIVO'})
+      @jwtAuth.hasAccessToBoard(authentication, #boardId, {'ADMINISTRADOR','SUPERVISOR','OPERATIVO'}) or
+      @jwtAuth.isReporterOfTask(authentication, #taskId) or
+      @jwtAuth.isAssignedToTask(authentication, #taskId)
     """)
     public Mono<AttachmentDto> complete(@PathVariable String boardId,
                                         @PathVariable String taskId,
@@ -45,7 +49,9 @@ public class TaskCommentController {
     @GetMapping("/attachments")
     @PreAuthorize("""
       @jwtAuth.isSuperadmin(authentication) or
-      @jwtAuth.hasAccessToBoard(authentication, #boardId, {'ADMINISTRADOR','SUPERVISOR','OPERATIVO'})
+      @jwtAuth.hasAccessToBoard(authentication, #boardId, {'ADMINISTRADOR','SUPERVISOR','OPERATIVO'}) or
+      @jwtAuth.isReporterOfTask(authentication, #taskId) or
+      @jwtAuth.isAssignedToTask(authentication, #taskId)
     """)
     public Flux<AttachmentDto> listAttachments(@PathVariable String boardId,
                                                @PathVariable String taskId,

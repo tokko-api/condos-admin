@@ -140,6 +140,14 @@ public class JwtAuth {
         return task.getAssigneeId().equals(auth.getName());
     }
 
+    /** ¿Es quien reportó esta tarea/incidencia (condómino u operativo)? Le permite adjuntar evidencia. */
+    public boolean isReporterOfTask(Authentication auth, String taskId) {
+        if (taskId == null || auth == null || !auth.isAuthenticated()) return false;
+        var task = tasks.findById(taskId).orElse(null);
+        if (task == null || task.getReportedBy() == null) return false;
+        return task.getReportedBy().equals(auth.getName());
+    }
+
     /** ¿Tiene alguno de los roles requeridos en el org dueño de esta amenidad? */
     public boolean hasAccessToAmenity(Authentication auth, String amenityId, Collection<String> rolesReq) {
         if (amenityId == null) return false;
