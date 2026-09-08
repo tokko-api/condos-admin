@@ -75,11 +75,11 @@ public class TaskController {
         return TaskResponse.from(t);
     }
 
-    // ======== UPDATE ========
+    // ======== UPDATE (incluye asignar/reasignar) ========
     @PutMapping("/tasks/{id}")
     @PreAuthorize("""
         @jwtAuth.isSuperadmin(authentication) or
-        @jwtAuth.hasAccessToTask(authentication, #id, {'ADMINISTRADOR','SUPERVISOR'})
+        @jwtAuth.hasAccessToTask(authentication, #id, {'ADMINISTRADOR','SUPERVISOR','OPERATIVO'})
     """)
     public TaskResponse update(@PathVariable String id, @Valid @RequestBody UpdateTaskRequest req) {
         var t = tasks.update(id, req.title(), req.description(), req.assigneeId(), req.dueDate());
