@@ -86,6 +86,64 @@ public class ReservationService {
         return repo.save(r);
     }
 
+    /**
+     * Modifica fecha/personas/nota de una reservación existente, re-validando
+     * las mismas reglas que al crear (RN-RES-01) pero sin contar la propia
+     * reservación entre las que ya ocupan cupo ese día.
+     */
+    public Reservation update(String id, LocalDate date, Integer peopleCount, String note) {
+        Reservation r = repo.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "reservation not found: " + id));
+        if (r.getStatus() != ReservationStatus.CONFIRMED) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Esta reservación ya no está activa.");
+        }
+        Amenity amenity = getAmenityOrThrow(r.getAmenityId());
+
+        LocalDate today = LocalDate.now();
+        if (date.isBefore(today)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "No puedes reservar una fecha pasada.");
+        }
+        if (amenity.getAdvanceBookingDays() != null) {
+            LocalDate maxDate = today.plusDays(amenity.getAdvanceBookingDays());
+            if (date.isAfter(maxDate)) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "Esta amenidad solo se puede reservar con hasta " + amenity.getAdvanceBookingDays() + " día(s) de anticipación.");
+            }
+        }
+
+        if (amenity.getMaxPeoplePerReservation() != null
+                && peopleCount != null && peopleCount > amenity.getMaxPeoplePerReservation()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Esta amenidad admite máximo " + amenity.getMaxPeoplePerReservation() + " persona(s) por reservación.");
+        }
+
+        List<Reservation> sameUnitSameDay =
+                repo.findByAmenityIdAndUnitIdAndDateAndStatus(r.getAmenityId(), r.getUnitId(), date, ReservationStatus.CONFIRMED)
+                        .stream().filter(other -> !other.getId().equals(id)).toList();
+        int maxPerUnit = amenity.getMaxReservationsPerUnitPerDay() != null
+                ? amenity.getMaxReservationsPerUnitPerDay() : Integer.MAX_VALUE;
+        if (sameUnitSameDay.size() >= maxPerUnit) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Tu unidad ya alcanzó el máximo de " + maxPerUnit + " reservación(es) de esta amenidad para ese día.");
+        }
+
+        if (amenity.getMaxReservationsPerDay() != null) {
+            List<Reservation> sameDay =
+                    repo.findByAmenityIdAndDateAndStatus(r.getAmenityId(), date, ReservationStatus.CONFIRMED)
+                            .stream().filter(other -> !other.getId().equals(id)).toList();
+            if (sameDay.size() >= amenity.getMaxReservationsPerDay()) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT,
+                        "Ya no hay cupo disponible para esta amenidad ese día.");
+            }
+        }
+
+        r.setDate(date);
+        r.setPeopleCount(peopleCount);
+        r.setNote(note);
+        r.setUpdatedAt(Instant.now());
+        return repo.save(r);
+    }
+
     public AmenityAvailabilityResponse availability(String amenityId, LocalDate date, String unitId) {
         Amenity amenity = amenities.findById(amenityId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "amenity not found: " + amenityId));

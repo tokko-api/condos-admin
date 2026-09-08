@@ -3,6 +3,7 @@ package com.condos.board.api;
 import com.condos.board.api.dto.AmenityAvailabilityResponse;
 import com.condos.board.api.dto.CreateReservationRequest;
 import com.condos.board.api.dto.ReservationResponse;
+import com.condos.board.api.dto.UpdateReservationRequest;
 import com.condos.board.service.ReservationService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -88,6 +89,18 @@ public class ReservationController {
     @GetMapping("/reservations/mine")
     public List<ReservationResponse> mine(Authentication authentication) {
         return reservations.listByRequester(authentication.getName()).stream().map(ReservationResponse::from).toList();
+    }
+
+    // ======== MODIFICAR (dueño o staff) ========
+    @PatchMapping("/reservations/{id}")
+    @PreAuthorize("""
+        @jwtAuth.isSuperadmin(authentication) or
+        @jwtAuth.isRequesterOfReservation(authentication, #id) or
+        @jwtAuth.hasAccessToReservation(authentication, #id, {'ADMINISTRADOR','SUPERVISOR'})
+    """)
+    public ReservationResponse update(@PathVariable String id, @Valid @RequestBody UpdateReservationRequest req) {
+        var r = reservations.update(id, req.date(), req.peopleCount(), req.note());
+        return ReservationResponse.from(r);
     }
 
     // ======== CANCELAR (dueño o staff) ========
