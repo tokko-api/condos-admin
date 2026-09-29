@@ -58,4 +58,45 @@ public class AccountStatementService {
                 payments.stream().map(PaymentResponse::from).toList()
         );
     }
+
+    /** Exporta un estado de cuenta a CSV (RN-PAG-05): resumen + cargos + pagos. */
+    public String toCsv(AccountStatementResponse st) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("Estado de cuenta,Unidad ").append(csv(st.unitId())).append('\n');
+        sb.append("Total cargado,").append(st.totalCharged()).append('\n');
+        sb.append("Total pagado,").append(st.totalPaid()).append('\n');
+        sb.append("Saldo,").append(st.balance()).append('\n');
+        sb.append("Saldo a favor,").append(st.creditBalance() != null ? st.creditBalance() : BigDecimal.ZERO).append('\n');
+        sb.append('\n');
+
+        sb.append("Cargos\n");
+        sb.append("Concepto,Periodo,Vence,Monto,Pagado,Estado\n");
+        for (var c : st.charges()) {
+            sb.append(csv(c.concept())).append(',')
+              .append(csv(c.period())).append(',')
+              .append(c.dueDate()).append(',')
+              .append(c.amount()).append(',')
+              .append(c.paidAmount()).append(',')
+              .append(c.status()).append('\n');
+        }
+        sb.append('\n');
+
+        sb.append("Pagos\n");
+        sb.append("Fecha,Monto,Método,Estado de conciliación\n");
+        for (var p : st.payments()) {
+            sb.append(p.reportedAt()).append(',')
+              .append(p.amount()).append(',')
+              .append(p.method()).append(',')
+              .append(p.reconciliationStatus()).append('\n');
+        }
+        return sb.toString();
+    }
+
+    private static String csv(String s) {
+        if (s == null) return "";
+        if (s.contains(",") || s.contains("\"") || s.contains("\n")) {
+            return "\"" + s.replace("\"", "\"\"") + "\"";
+        }
+        return s;
+    }
 }

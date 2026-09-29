@@ -35,6 +35,15 @@ board:
   api:
     base-url: ${BOARD_API_URL:http://board-api:8080/condos/api/board}
 
+user:
+  api:
+    base-url: ${USER_API_URL:http://user-api:8080/condos/api/user}
+
+mailgun:
+  api-key: ${MAILGUN_API_KEY:}
+  domain: ${MAILGUN_DOMAIN:}
+  mail-from: ${MAIL_FROM:noreply@lokaly.site}
+
 app:
   errors:
     verbose: ${ERRORS_VERBOSE:false}

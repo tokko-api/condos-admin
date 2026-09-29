@@ -211,6 +211,10 @@ services:
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
       JWT_EXPIRES_MINUTES: ${JWT_EXPIRES_MINUTES:-240}
       BOARD_API_URL: http://board-api:8080/condos/api/board
+      USER_API_URL: http://user-api:8080/condos/api/user
+      MAILGUN_API_KEY: ${MAILGUN_API_KEY:-}
+      MAILGUN_DOMAIN: ${MAILGUN_DOMAIN:-}
+      MAIL_FROM: ${MAIL_FROM:-noreply@lokaly.site}
     networks:
       - default
     healthcheck:
@@ -223,6 +227,8 @@ services:
       mongo:
         condition: service_healthy
       board-api:
+        condition: service_healthy
+      user-api:
         condition: service_healthy
 
   # ===========================================

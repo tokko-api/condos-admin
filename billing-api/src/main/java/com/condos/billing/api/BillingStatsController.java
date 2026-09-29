@@ -35,6 +35,28 @@ public class BillingStatsController {
     }
 
     /**
+     * Cobranza del mes de UNA colonia (boardId), para que un condómino pueda
+     * ver el dato de su propia colonia sin exponerle la cobranza de otras
+     * colonias de la organización (a diferencia de collection-by-board, que
+     * es una vista administrativa de toda la organización).
+     */
+    @GetMapping("/collection-by-board/mine")
+    @PreAuthorize("""
+        @jwtAuth.isSuperadmin(authentication) or
+        @jwtAuth.hasRoleInOrg(authentication, #orgId, {'ADMINISTRADOR','SUPERVISOR','OPERATIVO'}) or
+        @jwtAuth.isResidentOfBoard(authentication, #boardId)
+    """)
+    public BoardCollectionRes collectionForMyBoard(
+            @RequestParam String orgId,
+            @RequestParam String boardId,
+            @RequestParam(required = false) String period) {
+        return stats.collectionByBoard(orgId, period).stream()
+                .filter(r -> boardId.equals(r.boardId()))
+                .findFirst()
+                .orElse(new BoardCollectionRes(boardId, java.math.BigDecimal.ZERO, java.math.BigDecimal.ZERO, 0.0));
+    }
+
+    /**
      * Egresos del mes agrupados por condominio (boardId). Mismo formato de
      * `period` que collection-by-board.
      */

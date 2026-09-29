@@ -126,4 +126,20 @@ public class JwtAuth {
         var unit = boardApi.getUnit(unitId, bearerToken);
         return unit != null && auth.getName().equals(unit.residentUserId());
     }
+
+    /**
+     * ¿Es residente (condómino con unidad asignada) de este board/colonia?
+     * Igual que isOwnUnit pero cuando solo tenemos el boardId (no un unitId
+     * puntual), p. ej. para que un condómino consulte estadísticas agregadas
+     * de SU colonia sin poder pedir las de otras colonias de la organización.
+     */
+    public boolean isResidentOfBoard(Authentication auth, String boardId) {
+        if (boardId == null || auth == null || !auth.isAuthenticated()) return false;
+        var c = claims(auth);
+        Object token = c.get("token");
+        if (!(token instanceof String bearerToken) || bearerToken.isBlank()) return false;
+
+        var units = boardApi.listActiveUnitIds(boardId, bearerToken);
+        return units != null && units.stream().anyMatch(u -> auth.getName().equals(u.residentUserId()));
+    }
 }

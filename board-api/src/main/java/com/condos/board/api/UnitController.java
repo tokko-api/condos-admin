@@ -30,7 +30,7 @@ public class UnitController {
     @ResponseStatus(HttpStatus.CREATED)
     @PreAuthorize("""
         @jwtAuth.isSuperadmin(authentication) or
-        @jwtAuth.hasAccessToBoard(authentication, #boardId, {'ADMINISTRADOR','SUPERVISOR'})
+        @jwtAuth.hasAccessToBoard(authentication, #boardId, {'ADMINISTRADOR','SUPERVISOR','OPERATIVO'})
     """)
     public UnitResponse create(@PathVariable String boardId,
                                 @Valid @RequestBody CreateUnitRequest req) {
@@ -91,7 +91,7 @@ public class UnitController {
     @PatchMapping("/units/{id}/status")
     @PreAuthorize("""
         @jwtAuth.isSuperadmin(authentication) or
-        @jwtAuth.hasAccessToUnit(authentication, #id, {'ADMINISTRADOR','SUPERVISOR'})
+        @jwtAuth.hasAccessToUnit(authentication, #id, {'ADMINISTRADOR','SUPERVISOR','OPERATIVO'})
     """)
     public UnitResponse changeStatus(@PathVariable String id, @RequestBody UnitStatusReq req) {
         var u = units.changeStatus(id, req.status());

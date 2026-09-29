@@ -28,7 +28,7 @@ public class AmenityController {
     @ResponseStatus(HttpStatus.CREATED)
     @PreAuthorize("""
         @jwtAuth.isSuperadmin(authentication) or
-        @jwtAuth.hasAccessToBoard(authentication, #boardId, {'ADMINISTRADOR','SUPERVISOR'})
+        @jwtAuth.hasAccessToBoard(authentication, #boardId, {'ADMINISTRADOR','SUPERVISOR','OPERATIVO'})
     """)
     public AmenityResponse create(@PathVariable String boardId,
                                    @Valid @RequestBody CreateAmenityRequest req) {
@@ -67,7 +67,7 @@ public class AmenityController {
     @PutMapping("/amenities/{id}")
     @PreAuthorize("""
         @jwtAuth.isSuperadmin(authentication) or
-        @jwtAuth.hasAccessToAmenity(authentication, #id, {'ADMINISTRADOR','SUPERVISOR'})
+        @jwtAuth.hasAccessToAmenity(authentication, #id, {'ADMINISTRADOR','SUPERVISOR','OPERATIVO'})
     """)
     public AmenityResponse update(@PathVariable String id, @Valid @RequestBody UpdateAmenityRequest req) {
         var a = amenities.update(id, req.name(), req.description(), req.maxPeoplePerReservation(),
@@ -79,7 +79,7 @@ public class AmenityController {
     @PatchMapping("/amenities/{id}/status")
     @PreAuthorize("""
         @jwtAuth.isSuperadmin(authentication) or
-        @jwtAuth.hasAccessToAmenity(authentication, #id, {'ADMINISTRADOR','SUPERVISOR'})
+        @jwtAuth.hasAccessToAmenity(authentication, #id, {'ADMINISTRADOR','SUPERVISOR','OPERATIVO'})
     """)
     public AmenityResponse changeStatus(@PathVariable String id, @RequestBody AmenityStatusReq req) {
         var a = amenities.changeStatus(id, req.status());
