@@ -14,6 +14,8 @@ public record ReservationResponse(
         String unitId,
         String requestedBy,
         LocalDate date,
+        String startTime,
+        String endTime,
         Integer peopleCount,
         String note,
         ReservationStatus status,
@@ -23,7 +25,7 @@ public record ReservationResponse(
     public static ReservationResponse from(Reservation r) {
         return new ReservationResponse(
                 r.getId(), r.getBoardId(), r.getOrgId(), r.getAmenityId(), r.getUnitId(),
-                r.getRequestedBy(), r.getDate(), r.getPeopleCount(), r.getNote(),
+                r.getRequestedBy(), r.getDate(), r.getStartTime(), r.getEndTime(), r.getPeopleCount(), r.getNote(),
                 r.getStatus(), r.getCreatedAt(), r.getUpdatedAt()
         );
     }

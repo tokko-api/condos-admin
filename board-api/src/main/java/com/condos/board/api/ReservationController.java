@@ -35,7 +35,7 @@ public class ReservationController {
                                        @Valid @RequestBody CreateReservationRequest req,
                                        Authentication authentication) {
         var r = reservations.create(amenityId, req.unitId(),
-                authentication.getName(), req.date(), req.peopleCount(), req.note());
+                authentication.getName(), req.date(), req.startTime(), req.peopleCount(), req.note());
         return ReservationResponse.from(r);
     }
 
@@ -99,7 +99,7 @@ public class ReservationController {
         @jwtAuth.hasAccessToReservation(authentication, #id, {'ADMINISTRADOR','SUPERVISOR'})
     """)
     public ReservationResponse update(@PathVariable String id, @Valid @RequestBody UpdateReservationRequest req) {
-        var r = reservations.update(id, req.date(), req.peopleCount(), req.note());
+        var r = reservations.update(id, req.date(), req.startTime(), req.peopleCount(), req.note());
         return ReservationResponse.from(r);
     }
 

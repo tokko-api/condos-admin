@@ -17,6 +17,9 @@ public interface ReservationRepository extends MongoRepository<Reservation, Stri
     List<Reservation> findByAmenityIdAndUnitIdAndDateAndStatus(
             String amenityId, String unitId, LocalDate date, ReservationStatus status);
 
+    List<Reservation> findByAmenityIdAndDateAndStartTimeAndStatus(
+            String amenityId, LocalDate date, String startTime, ReservationStatus status);
+
     List<Reservation> findByBoardIdAndDateAndStatus(String boardId, LocalDate date, ReservationStatus status);
 
     List<Reservation> findByBoardIdAndDateBetweenAndStatus(

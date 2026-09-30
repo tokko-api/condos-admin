@@ -6,7 +6,9 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.env.Environment;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.security.access.AccessDeniedException;
+import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ControllerAdvice;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -63,6 +65,31 @@ public class GlobalExceptionHandler {
         String msg = "Invalid value for parameter '" + ex.getName() + "'";
         return ResponseEntity.status(status).body(
                 new ErrorResponse(verbose ? msg : "Bad request", status.value(), Instant.now())
+        );
+    }
+
+    // Body de la petición ilegible: JSON corrupto, o un campo con formato
+    // inválido (ej. una fecha "2026-10-3" en vez de "2026-10-03") — antes
+    // caía al handler genérico y respondía 500 en vez de 400.
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<ErrorResponse> handleNotReadable(HttpMessageNotReadableException ex) {
+        HttpStatus status = HttpStatus.BAD_REQUEST;
+        return ResponseEntity.status(status).body(
+                new ErrorResponse(verbose ? messageOf(ex) : "Cuerpo de la petición inválido o mal formado",
+                        status.value(), Instant.now())
+        );
+    }
+
+    // @Valid en @RequestBody: @NotBlank, @NotNull, etc.
+    @ExceptionHandler(MethodArgumentNotValidException.class)
+    public ResponseEntity<ErrorResponse> handleNotValid(MethodArgumentNotValidException ex) {
+        HttpStatus status = HttpStatus.BAD_REQUEST;
+        String msg = ex.getBindingResult().getFieldErrors().stream()
+                .findFirst()
+                .map(f -> f.getField() + " " + f.getDefaultMessage())
+                .orElse("Validation error");
+        return ResponseEntity.status(status).body(
+                new ErrorResponse(verbose ? msg : "Validation error", status.value(), Instant.now())
         );
     }
 

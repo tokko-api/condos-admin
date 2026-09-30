@@ -5,6 +5,8 @@ import com.condos.board.model.AmenityStatus;
 
 import java.time.Instant;
 
+import java.util.List;
+
 public record AmenityResponse(
         String id,
         String boardId,
@@ -15,6 +17,12 @@ public record AmenityResponse(
         Integer maxReservationsPerUnitPerDay,
         Integer maxReservationsPerDay,
         Integer advanceBookingDays,
+        String openTime,
+        String closeTime,
+        Integer slotDurationMinutes,
+        List<String> timeSlots, // horas de inicio generadas, vacío si no usa horarios
+        List<BlockedDateDto> blockedDates,
+        List<RecurringBlockDto> recurringBlocks,
         String notes,
         AmenityStatus status,
         Instant createdAt,
@@ -24,8 +32,11 @@ public record AmenityResponse(
         return new AmenityResponse(
                 a.getId(), a.getBoardId(), a.getOrgId(), a.getName(), a.getDescription(),
                 a.getMaxPeoplePerReservation(), a.getMaxReservationsPerUnitPerDay(),
-                a.getMaxReservationsPerDay(), a.getAdvanceBookingDays(), a.getNotes(),
-                a.getStatus(), a.getCreatedAt(), a.getUpdatedAt()
+                a.getMaxReservationsPerDay(), a.getAdvanceBookingDays(),
+                a.getOpenTime(), a.getCloseTime(), a.getSlotDurationMinutes(), a.generateSlots(),
+                BlockedDateDto.fromModelList(a.getBlockedDates()),
+                RecurringBlockDto.fromModelList(a.getRecurringBlocks()),
+                a.getNotes(), a.getStatus(), a.getCreatedAt(), a.getUpdatedAt()
         );
     }
 }

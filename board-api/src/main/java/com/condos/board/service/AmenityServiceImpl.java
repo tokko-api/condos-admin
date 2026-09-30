@@ -22,9 +22,13 @@ public class AmenityServiceImpl implements AmenityService {
     @Override
     public Amenity create(String orgId, String boardId, String name, String description,
                            Integer maxPeoplePerReservation, Integer maxReservationsPerUnitPerDay,
-                           Integer maxReservationsPerDay, Integer advanceBookingDays, String notes) {
+                           Integer maxReservationsPerDay, Integer advanceBookingDays,
+                           String openTime, String closeTime, Integer slotDurationMinutes,
+                           List<Amenity.BlockedDate> blockedDates, List<Amenity.RecurringBlock> recurringBlocks,
+                           String notes) {
         Amenity a = Amenity.newAmenity(orgId, boardId, name, description, maxPeoplePerReservation,
-                maxReservationsPerUnitPerDay, maxReservationsPerDay, advanceBookingDays, notes);
+                maxReservationsPerUnitPerDay, maxReservationsPerDay, advanceBookingDays,
+                openTime, closeTime, slotDurationMinutes, blockedDates, recurringBlocks, notes);
         return repo.save(a);
     }
 
@@ -43,7 +47,10 @@ public class AmenityServiceImpl implements AmenityService {
     @Override
     public Amenity update(String id, String name, String description,
                            Integer maxPeoplePerReservation, Integer maxReservationsPerUnitPerDay,
-                           Integer maxReservationsPerDay, Integer advanceBookingDays, String notes) {
+                           Integer maxReservationsPerDay, Integer advanceBookingDays,
+                           String openTime, String closeTime, Integer slotDurationMinutes,
+                           List<Amenity.BlockedDate> blockedDates, List<Amenity.RecurringBlock> recurringBlocks,
+                           String notes) {
         Amenity a = repo.findById(id).orElseThrow(() -> notFound(id));
 
         if (StringUtils.hasText(name)) a.setName(name);
@@ -55,6 +62,11 @@ public class AmenityServiceImpl implements AmenityService {
         a.setMaxReservationsPerUnitPerDay(maxReservationsPerUnitPerDay);
         a.setMaxReservationsPerDay(maxReservationsPerDay);
         a.setAdvanceBookingDays(advanceBookingDays);
+        a.setOpenTime(openTime);
+        a.setCloseTime(closeTime);
+        a.setSlotDurationMinutes(slotDurationMinutes);
+        a.setBlockedDates(blockedDates);
+        a.setRecurringBlocks(recurringBlocks);
         a.setNotes(notes);
 
         a.setUpdatedAt(Instant.now());

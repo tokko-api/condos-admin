@@ -2,7 +2,9 @@ package com.condos.board.api;
 
 import com.condos.board.api.dto.AmenityResponse;
 import com.condos.board.api.dto.AmenityStatusReq;
+import com.condos.board.api.dto.BlockedDateDto;
 import com.condos.board.api.dto.CreateAmenityRequest;
+import com.condos.board.api.dto.RecurringBlockDto;
 import com.condos.board.api.dto.UpdateAmenityRequest;
 import com.condos.board.service.AmenityService;
 import com.condos.board.service.BoardService;
@@ -35,7 +37,10 @@ public class AmenityController {
         var board = boards.get(boardId).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
         var a = amenities.create(board.orgId, boardId, req.name(), req.description(),
                 req.maxPeoplePerReservation(), req.maxReservationsPerUnitPerDay(),
-                req.maxReservationsPerDay(), req.advanceBookingDays(), req.notes());
+                req.maxReservationsPerDay(), req.advanceBookingDays(),
+                req.openTime(), req.closeTime(), req.slotDurationMinutes(),
+                BlockedDateDto.toModelList(req.blockedDates()), RecurringBlockDto.toModelList(req.recurringBlocks()),
+                req.notes());
         return AmenityResponse.from(a);
     }
 
@@ -71,7 +76,10 @@ public class AmenityController {
     """)
     public AmenityResponse update(@PathVariable String id, @Valid @RequestBody UpdateAmenityRequest req) {
         var a = amenities.update(id, req.name(), req.description(), req.maxPeoplePerReservation(),
-                req.maxReservationsPerUnitPerDay(), req.maxReservationsPerDay(), req.advanceBookingDays(), req.notes());
+                req.maxReservationsPerUnitPerDay(), req.maxReservationsPerDay(), req.advanceBookingDays(),
+                req.openTime(), req.closeTime(), req.slotDurationMinutes(),
+                BlockedDateDto.toModelList(req.blockedDates()), RecurringBlockDto.toModelList(req.recurringBlocks()),
+                req.notes());
         return AmenityResponse.from(a);
     }
 

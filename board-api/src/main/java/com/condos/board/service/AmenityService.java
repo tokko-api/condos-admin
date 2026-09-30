@@ -10,7 +10,10 @@ public interface AmenityService {
 
     Amenity create(String orgId, String boardId, String name, String description,
                     Integer maxPeoplePerReservation, Integer maxReservationsPerUnitPerDay,
-                    Integer maxReservationsPerDay, Integer advanceBookingDays, String notes);
+                    Integer maxReservationsPerDay, Integer advanceBookingDays,
+                    String openTime, String closeTime, Integer slotDurationMinutes,
+                    List<Amenity.BlockedDate> blockedDates, List<Amenity.RecurringBlock> recurringBlocks,
+                    String notes);
 
     Optional<Amenity> get(String id);
 
@@ -18,7 +21,10 @@ public interface AmenityService {
 
     Amenity update(String id, String name, String description,
                     Integer maxPeoplePerReservation, Integer maxReservationsPerUnitPerDay,
-                    Integer maxReservationsPerDay, Integer advanceBookingDays, String notes);
+                    Integer maxReservationsPerDay, Integer advanceBookingDays,
+                    String openTime, String closeTime, Integer slotDurationMinutes,
+                    List<Amenity.BlockedDate> blockedDates, List<Amenity.RecurringBlock> recurringBlocks,
+                    String notes);
 
     Amenity changeStatus(String id, AmenityStatus status);
 }

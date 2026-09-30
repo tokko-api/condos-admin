@@ -14,6 +14,7 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.LocalTime;
 import java.util.List;
 import java.util.NoSuchElementException;
 import java.util.Optional;
@@ -38,12 +39,14 @@ public class ReservationService {
     }
 
     public Reservation create(String amenityId, String unitId,
-                               String requestedBy, LocalDate date, Integer peopleCount, String note) {
+                               String requestedBy, LocalDate date, String startTime, Integer peopleCount, String note) {
         Amenity amenity = getAmenityOrThrow(amenityId);
 
         if (amenity.getStatus() != AmenityStatus.ACTIVE) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Esta amenidad no está disponible para reservar.");
         }
+
+        assertNotBlocked(amenity, date);
 
         LocalDate today = LocalDate.now();
         if (date.isBefore(today)) {
@@ -61,6 +64,19 @@ public class ReservationService {
                 && peopleCount != null && peopleCount > amenity.getMaxPeoplePerReservation()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "Esta amenidad admite máximo " + amenity.getMaxPeoplePerReservation() + " persona(s) por reservación.");
+        }
+
+        String resolvedStartTime = resolveStartTime(amenity, startTime);
+        String resolvedEndTime = resolvedStartTime == null
+                ? null
+                : LocalTime.parse(resolvedStartTime).plusMinutes(amenity.getSlotDurationMinutes()).toString();
+
+        if (resolvedStartTime != null) {
+            List<Reservation> sameSlot = repo.findByAmenityIdAndDateAndStartTimeAndStatus(
+                    amenityId, date, resolvedStartTime, ReservationStatus.CONFIRMED);
+            if (!sameSlot.isEmpty()) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT, "Ese horario ya está reservado.");
+            }
         }
 
         List<Reservation> sameUnitSameDay =
@@ -82,8 +98,36 @@ public class ReservationService {
         }
 
         Reservation r = Reservation.newReservation(amenity.getOrgId(), amenity.getBoardId(), amenityId, unitId,
-                requestedBy, date, peopleCount, note);
+                requestedBy, date, resolvedStartTime, resolvedEndTime, peopleCount, note);
         return repo.save(r);
+    }
+
+    /** Lanza 409 si ese día está bloqueado para reservar (fecha puntual o regla recurrente). */
+    private void assertNotBlocked(Amenity amenity, LocalDate date) {
+        String reason = amenity.blockedReason(date);
+        if (reason != null) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Esta amenidad no está disponible ese día" + (!reason.isBlank() ? " (" + reason + ")" : "") + ".");
+        }
+    }
+
+    /**
+     * Valida/normaliza el horario elegido contra los slots que ofrece la
+     * amenidad. Devuelve null si la amenidad no usa horarios (reserva por
+     * día completo).
+     */
+    private String resolveStartTime(Amenity amenity, String startTime) {
+        if (!amenity.hasTimeSlots()) {
+            return null; // esta amenidad se reserva por día, no por hora
+        }
+        if (startTime == null || startTime.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Debes elegir un horario para esta amenidad.");
+        }
+        List<String> slots = amenity.generateSlots();
+        if (!slots.contains(startTime)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Ese horario no es válido para esta amenidad.");
+        }
+        return startTime;
     }
 
     /**
@@ -91,13 +135,15 @@ public class ReservationService {
      * las mismas reglas que al crear (RN-RES-01) pero sin contar la propia
      * reservación entre las que ya ocupan cupo ese día.
      */
-    public Reservation update(String id, LocalDate date, Integer peopleCount, String note) {
+    public Reservation update(String id, LocalDate date, String startTime, Integer peopleCount, String note) {
         Reservation r = repo.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "reservation not found: " + id));
         if (r.getStatus() != ReservationStatus.CONFIRMED) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Esta reservación ya no está activa.");
         }
         Amenity amenity = getAmenityOrThrow(r.getAmenityId());
+
+        assertNotBlocked(amenity, date);
 
         LocalDate today = LocalDate.now();
         if (date.isBefore(today)) {
@@ -115,6 +161,20 @@ public class ReservationService {
                 && peopleCount != null && peopleCount > amenity.getMaxPeoplePerReservation()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "Esta amenidad admite máximo " + amenity.getMaxPeoplePerReservation() + " persona(s) por reservación.");
+        }
+
+        String resolvedStartTime = resolveStartTime(amenity, startTime);
+        String resolvedEndTime = resolvedStartTime == null
+                ? null
+                : LocalTime.parse(resolvedStartTime).plusMinutes(amenity.getSlotDurationMinutes()).toString();
+
+        if (resolvedStartTime != null) {
+            List<Reservation> sameSlot = repo.findByAmenityIdAndDateAndStartTimeAndStatus(
+                            r.getAmenityId(), date, resolvedStartTime, ReservationStatus.CONFIRMED)
+                    .stream().filter(other -> !other.getId().equals(id)).toList();
+            if (!sameSlot.isEmpty()) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT, "Ese horario ya está reservado.");
+            }
         }
 
         List<Reservation> sameUnitSameDay =
@@ -138,6 +198,8 @@ public class ReservationService {
         }
 
         r.setDate(date);
+        r.setStartTime(resolvedStartTime);
+        r.setEndTime(resolvedEndTime);
         r.setPeopleCount(peopleCount);
         r.setNote(note);
         r.setUpdatedAt(Instant.now());
@@ -156,7 +218,17 @@ public class ReservationService {
 
         boolean unitAlready = unitId != null && sameDay.stream().anyMatch(r -> unitId.equals(r.getUnitId()));
 
-        return new AmenityAvailabilityResponse(amenityId, date, max, sameDay.size(), remaining, unitAlready);
+        List<String> allSlots = amenity.generateSlots();
+        List<String> takenSlots = sameDay.stream()
+                .map(Reservation::getStartTime)
+                .filter(java.util.Objects::nonNull)
+                .distinct()
+                .toList();
+
+        String blockReason = amenity.blockedReason(date);
+
+        return new AmenityAvailabilityResponse(amenityId, date, max, sameDay.size(), remaining, unitAlready,
+                allSlots, takenSlots, blockReason != null, blockReason);
     }
 
     public Optional<Reservation> get(String id) {

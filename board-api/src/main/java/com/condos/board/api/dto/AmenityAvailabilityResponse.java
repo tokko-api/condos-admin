@@ -1,6 +1,7 @@
 package com.condos.board.api.dto;
 
 import java.time.LocalDate;
+import java.util.List;
 
 /** Disponibilidad de una amenidad para un día específico, pensado para mostrarle al condómino antes de reservar. */
 public record AmenityAvailabilityResponse(
@@ -9,5 +10,9 @@ public record AmenityAvailabilityResponse(
         Integer maxReservationsPerDay,   // null = sin límite
         int confirmedCount,              // reservaciones confirmadas ese día (todas las unidades)
         Integer remaining,                // null = sin límite; si no, maxReservationsPerDay - confirmedCount (mínimo 0)
-        boolean unitAlreadyReservedToday  // true si la unidad que consulta ya tiene una reservación confirmada ese día
+        boolean unitAlreadyReservedToday, // true si la unidad que consulta ya tiene una reservación confirmada ese día
+        List<String> allSlots,            // horarios "HH:mm" que la amenidad ofrece ese día (vacío si no usa horarios)
+        List<String> takenSlots,          // de allSlots, los que ya están reservados ese día
+        boolean blocked,                  // true si ese día está bloqueado (mantenimiento u otro motivo)
+        String blockReason                // motivo del bloqueo, si lo hay
 ) {}

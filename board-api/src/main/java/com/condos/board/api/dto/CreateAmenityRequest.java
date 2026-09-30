@@ -2,6 +2,8 @@ package com.condos.board.api.dto;
 
 import jakarta.validation.constraints.NotBlank;
 
+import java.util.List;
+
 public record CreateAmenityRequest(
         @NotBlank String name,
         String description,
@@ -9,5 +11,10 @@ public record CreateAmenityRequest(
         Integer maxReservationsPerUnitPerDay,
         Integer maxReservationsPerDay,
         Integer advanceBookingDays,
+        String openTime,
+        String closeTime,
+        Integer slotDurationMinutes,
+        List<BlockedDateDto> blockedDates,
+        List<RecurringBlockDto> recurringBlocks,
         String notes
 ) {}

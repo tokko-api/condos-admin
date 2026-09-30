@@ -121,17 +121,26 @@ public class UserService {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "invalid orgId");
             }
         }
-        UserRole tmpRole   = (roleStr   == null || roleStr.isBlank())   ? null : UserRole.valueOf(roleStr);
+        // role= admite uno o varios roles separados por coma, ej.
+        // "role=ADMINISTRADOR,SUPERVISOR,OPERATIVO" (para pickers de
+        // asignación de tareas, que no deben ofrecer CONDOMINO).
+        java.util.Set<UserRole> tmpRoles = (roleStr == null || roleStr.isBlank())
+                ? null
+                : java.util.Arrays.stream(roleStr.split(","))
+                        .map(String::trim)
+                        .filter(s -> !s.isEmpty())
+                        .map(UserRole::valueOf)
+                        .collect(java.util.stream.Collectors.toSet());
         UserStatus tmpStat = (statusStr == null || statusStr.isBlank()) ? null : UserStatus.valueOf(statusStr);
 
         // copias finales para las lambdas
         final ObjectId fOrgId = tmpOrgId;
-        final UserRole fRole = tmpRole;
+        final java.util.Set<UserRole> fRoles = tmpRoles;
         final UserStatus fStatus = tmpStat;
 
         return all.stream()
                 .filter(u -> fOrgId == null  || u.getOrgAssignments().stream().anyMatch(a -> fOrgId.equals(a.getOrgId())))
-                .filter(u -> fRole == null   || u.getOrgAssignments().stream().anyMatch(a -> fRole.equals(a.getRole())))
+                .filter(u -> fRoles == null  || u.getOrgAssignments().stream().anyMatch(a -> fRoles.contains(a.getRole())))
                 .filter(u -> fStatus == null || u.getOrgAssignments().stream().anyMatch(a -> fStatus.equals(a.getStatus())))
                 .map(this::toSummary)
                 .toList();

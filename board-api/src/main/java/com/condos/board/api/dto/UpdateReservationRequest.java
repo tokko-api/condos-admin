@@ -6,6 +6,7 @@ import java.time.LocalDate;
 
 public record UpdateReservationRequest(
         @NotNull LocalDate date,
+        String startTime,
         Integer peopleCount,
         String note
 ) {}

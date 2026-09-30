@@ -36,6 +36,12 @@ public class Reservation {
     private String requestedBy; // userId (condomino) que la creó
 
     private LocalDate date;
+
+    // Horario (RN-RES-02): null si la amenidad no usa horarios por bloque
+    // (se reserva por día completo, comportamiento anterior).
+    private String startTime; // "HH:mm"
+    private String endTime;   // "HH:mm", startTime + slotDurationMinutes de la amenidad
+
     private Integer peopleCount;
     private String note; // nota opcional del condómino, ej. "cumpleaños"
 
@@ -45,7 +51,8 @@ public class Reservation {
     private Instant updatedAt;
 
     public static Reservation newReservation(String orgId, String boardId, String amenityId, String unitId,
-                                              String requestedBy, LocalDate date, Integer peopleCount, String note) {
+                                              String requestedBy, LocalDate date, String startTime, String endTime,
+                                              Integer peopleCount, String note) {
         Instant now = Instant.now();
         return Reservation.builder()
                 .orgId(orgId)
@@ -54,6 +61,8 @@ public class Reservation {
                 .unitId(unitId)
                 .requestedBy(requestedBy)
                 .date(date)
+                .startTime(startTime)
+                .endTime(endTime)
                 .peopleCount(peopleCount)
                 .note(note)
                 .status(ReservationStatus.CONFIRMED)

@@ -40,7 +40,20 @@ public class TaskController {
                                Authentication authentication) {
         // obtenemos orgId del board para guardar junto con la tarea
         var board = boards.get(boardId).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
-        var t = tasks.create(board.orgId, boardId, req.title(), req.description(), req.assigneeId(), req.dueDate(),
+
+        // Si quien reporta es un residente (condómino) y no se indicó a quién
+        // asignarla, se asigna por defecto al supervisor de la colonia para
+        // que no quede invisible/sin dueño (antes se quedaba sin asignar y
+        // nadie la veía en "Mis tareas"). El staff sigue pudiendo dejarla sin
+        // asignar a propósito si así lo decide.
+        boolean isStaff = jwtAuth.isSuperadmin(authentication)
+                || jwtAuth.hasAccessToBoard(authentication, boardId, java.util.Set.of("ADMINISTRADOR", "SUPERVISOR", "OPERATIVO"));
+        String assigneeId = req.assigneeId();
+        if (assigneeId == null && !isStaff && board.supervisorUserId != null) {
+            assigneeId = board.supervisorUserId;
+        }
+
+        var t = tasks.create(board.orgId, boardId, req.title(), req.description(), assigneeId, req.dueDate(),
                 authentication.getName());
         return TaskResponse.from(t);
     }
@@ -76,13 +89,22 @@ public class TaskController {
     }
 
     // ======== UPDATE (incluye asignar/reasignar) ========
+    // El staff puede editar todo (incluida la asignación). Quien reportó la
+    // incidencia (ej. un condómino) solo puede corregir título/descripción:
+    // aunque mande assigneeId/dueDate en el body, se ignoran si no es staff.
     @PutMapping("/tasks/{id}")
     @PreAuthorize("""
         @jwtAuth.isSuperadmin(authentication) or
-        @jwtAuth.hasAccessToTask(authentication, #id, {'ADMINISTRADOR','SUPERVISOR','OPERATIVO'})
+        @jwtAuth.hasAccessToTask(authentication, #id, {'ADMINISTRADOR','SUPERVISOR','OPERATIVO'}) or
+        @jwtAuth.isReporterOfTask(authentication, #id)
     """)
-    public TaskResponse update(@PathVariable String id, @Valid @RequestBody UpdateTaskRequest req) {
-        var t = tasks.update(id, req.title(), req.description(), req.assigneeId(), req.dueDate());
+    public TaskResponse update(@PathVariable String id, @Valid @RequestBody UpdateTaskRequest req,
+                                Authentication authentication) {
+        boolean isStaff = jwtAuth.isSuperadmin(authentication)
+                || jwtAuth.hasAccessToTask(authentication, id, java.util.Set.of("ADMINISTRADOR", "SUPERVISOR", "OPERATIVO"));
+        var t = tasks.update(id, req.title(), req.description(),
+                isStaff ? req.assigneeId() : null,
+                isStaff ? req.dueDate() : null);
         return TaskResponse.from(t);
     }
 
